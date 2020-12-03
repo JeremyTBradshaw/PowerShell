@@ -6,7 +6,7 @@
     Find all 'large' items using the hidden 'AllItems' search folder.  This method is much faster than enumerating
     folders and items to accomplish the same thing (faster as in hours, even days, depending on the number and size of
     mailboxes being searched).
-    
+
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
     output file (even if there are no large items found).
 
@@ -142,7 +142,7 @@
         ...
         ...
         [ 2020-11-22 04:20:00 PM ] Get-MailoxLargeItems.ps1 - Script end.
-    
+
     .Link
     https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxLargeItems.ps1
 
@@ -234,11 +234,11 @@ function writeLog {
 
         [Parameter(Mandatory)]
         [System.IO.FileInfo]$Folder,
-  
+
         [ErrorRecord]$ErrorRecord,
 
         [Parameter(Mandatory)]
-		[datetime]$LogDateTime = [datetime]::Now,
+        [datetime]$LogDateTime = [datetime]::Now,
 
         [switch]$DisableLogging
     )
@@ -289,10 +289,10 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
     # Going with Exchange2010_SP1 because it is the earliest version of the EWS schema that does what we need, per:
     # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/ews-schema-versions-in-exchange#designing-your-application-with-schema-version-in-mind
     $ExSvc = [ExchangeService]::new(
-        
+
         [ExchangeVersion]::Exchange2010_SP1
     )
-    
+
     if ($PSCmdlet.ParameterSetName -like 'OAuth*') {
 
         $ExSvc.Credentials = [OAuthCredentials]::new($AccessToken.access_token)
@@ -304,14 +304,14 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
     }
 
     $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
-    
+
         [ConnectingIdType]::SmtpAddress, $Mailbox
     )
 
     # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
     $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
     $ExSvc.UserAgent = 'Get-MailboxLargeItems.ps1'
-    
+
     # Increase the timeout by 50% (default is 100,000) to cater to large mailboxes:
     $ExSvc.Timeout = 150000
     $ExSvc
@@ -332,7 +332,7 @@ function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
     $SearchFilterCollection = [SearchFilter+SearchFilterCollection]::new([LogicalOperator]::And)
     $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new([FolderSchema]::DisplayName, 'AllItems'))
     $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new(
-    
+
             # ExtendedPropertyDefinition for MAPI property PR_FOLDER_TYPE:
             [ExtendedPropertyDefinition]::new(
                 13825, #<--: Tag (Int32 value)
@@ -342,7 +342,7 @@ function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
         ))
 
     $AllItemsSearchFolder = $ExSvc.FindFolders(
-        
+
         [FolderId]::new($AllItemsParentFolder, $ExSvc.ImpersonatedUserId.Id),
         $SearchFilterCollection,
         $FolderView
@@ -355,7 +355,7 @@ function New-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
 
     $AllItemsParentFolder = if ($Archive) { 'ArchiveRoot' } else { 'Root' }
     $SearhRootFolder = if ($Archive) { 'ArchiveMsgFolderRoot' } else { 'MsgFolderRoot' }
-    
+
     $AllItemsSearchFolder = [SearchFolder]::new($ExSvc)
     $AllItemsSearchFolder.SearchParameters.Traversal = [SearchFolderTraversal]::Deep
     $AllItemsSearchFolder.SearchParameters.SearchFilter = [SearchFilter+Exists]([ItemSchema]::ItemClass)
@@ -381,7 +381,7 @@ function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) 
     Write-Progress @ProgressParams
 
     $SearchFilter = [SearchFilter+IsGreaterThanOrEqualTo]::new(
-        
+
         [ItemSchema]::Size, ($LargeItemSizeMB * 1MB)
     )
 
@@ -392,7 +392,7 @@ function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) 
 
     do {
         $ItemView = [ItemView]::new(
-            
+
             $PageSize,
             $Offset,
             [OffsetBasePoint]::Beginning
@@ -446,7 +446,7 @@ function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) 
         }
 
         [PSCustomObject]@{
-        
+
             Mailbox         = $ExSvc.ImpersonatedUserId.Id
             MailboxLocation = if ($Archive) { 'Archive Mailbox' } else { 'Primary Mailbox' }
             ItemClass       = $Item.ItemClass
@@ -473,7 +473,7 @@ function Get-FolderPath ($ExSvc, $FolderId, [switch]$Archive) {
         $nextFolderId = $thisFolder.ParentFolderId
     }
     while ($nextFolderId -ne $TopOfInformationStore.Id)
-    
+
     [System.Array]::Reverse($FolderPath)
     $FolderPath -join '\' -replace 'Top of Information Store'
 }
@@ -498,7 +498,7 @@ try {
 
         # Check for and if necessary create logs folder:
         if (-not (Test-Path -Path "$($writeLogParams['Folder'])")) {
-            
+
             [void](New-Item -Path "$($writeLogParams['Folder'])" -ItemType Directory -ErrorAction Stop)
         }
 
@@ -516,7 +516,7 @@ try {
         }
 
         writeLog @writeLogParams -Message "LargeItemsSizeMB set to $($LargeItemSizeMB) MB."
-        
+
         if ($PSBoundParameters.ContainsKey('Archive')) {
 
             writeLog @writeLogParams -Message 'Searching Archive mailboxes (-Archive switch parameter was used).'
@@ -541,7 +541,7 @@ try {
         $writeLogParams['DisableLogging'] = $true
 
         foreach ($sA in $MailboxSmtpAddress) {
-            
+
             $Mailboxes += [PSCustomObject]@{ SmtpAddress = $sA }
         }
     }
@@ -564,7 +564,7 @@ try {
         Id       = 0
         Activity = "Get-MailboxLargeItem.ps1 (Primary Mailboxes) - Start time: $($dtNow)"
     }
-    
+
     $MailboxCounter = 0
 
     foreach ($Mailbox in $Mailboxes.SmtpAddress) {
@@ -581,12 +581,12 @@ try {
         }
 
         Write-Progress @MainProgressParams
-        
+
         try {
             writeLog @writeLogParams -Message "Mailbox: $($MailboxCounter) of $($Mailboxes.Count)"
-            
+
             $ExSvcParams = @{ Mailbox = $Mailbox }
-            
+
             if ($PSCmdlet.ParameterSetName -like 'OAuth*') {
 
                 $ExSvcParams['AccessToken'] = $AccessToken
@@ -597,12 +597,12 @@ try {
             }
 
             $ExSvc = New-EwsBinding @ExSvcParams
-            
+
             $AllItemsSearchFolder = $null
             $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive
 
             if (-not $AllItemsSearchFolder) {
-            
+
                 $currentMsg = $null
                 $currentMsg = "Mailbox: $($Mailbox) | No 'AllItems' hidden search folder found."
                 writeLog @writeLogParams -Message $currentMsg
@@ -616,11 +616,11 @@ try {
                     [void](New-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive)
 
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Created new 'AllItems' hidden search folder."
-                    
+
                     Start-Sleep -Seconds 3 #<--: Not expected often so 3 seconds is acceptable.
-                    
+
                     $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive
-                    
+
                     if (-not $AllItemsSearchFolder) { throw 90210 }
                 }
             }
@@ -640,11 +640,11 @@ try {
                 $LargeItems += Get-LargeItems @getLargeItemsParams
 
                 writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Found $($LargeItems.Count) large items."
-        
+
                 if ($LargeItems.Count -ge 1) {
-        
+
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing large items to output CSV."
-                    
+
                     if ($PSCmdlet.ParameterSetName -like '*_CSV') {
 
                         $LargeItems | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
@@ -662,6 +662,7 @@ try {
             }
             elseif (
                 ($_.ToString().Contains('The SMTP address has no mailbox associated with it.')) -or
+                ($_.Exception.InnerException -match 'No mailbox with such guid.') -or
                 ((-not $Archive) -and $_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
             ) {
                 $currentMsg = $null
@@ -671,11 +672,24 @@ try {
                 writeLog @writeLogParams -Message $currentMsg
             }
             elseif (
-                ($PSBoundParameters.ContainsKey('Archive') -and $_.ToString().Contains('The specified folder could not be found in the store.')) -or
-                ($PSBoundParameters.ContainsKey('Archive') -and $_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
+                ($PSBoundParameters.ContainsKey('Archive')) -and
+                (
+                    ($_.ToString().Contains('The specified folder could not be found in the store.')) -or
+                    ($_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
+                )
             ) {
                 $currentMsg = $null
                 $currentMsg = "Mailbox: $($Mailbox) | There is no archive mailbox for this user."
+
+                Write-Warning -Message $currentMsg
+                writeLog @writeLogParams -Message $currentMsg
+            }
+            elseif (
+                ($PSBoundParameters.ContainsKey('Archive')) -and
+                ($_.Exception.InnerException -match "The user's remote archive is disabled.")
+            ) {
+                $currentMsg = $null
+                $currentMsg = "Mailbox: $($Mailbox) | There is no local archive mailbox for this user, although there may be one in EXO."
 
                 Write-Warning -Message $currentMsg
                 writeLog @writeLogParams -Message $currentMsg
