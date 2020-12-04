@@ -105,7 +105,9 @@ using namespace System.Management.Automation
 using namespace Microsoft.Exchange.WebServices.Data
 
 [CmdletBinding(
-    DefaultParameterSetName = 'OAuth_SmtpAddress'
+    DefaultParameterSetName = 'OAuth_SmtpAddress',
+    SupportsShouldProcess = $true,
+    ConfirmImpact = 'High'
 )]
 param(
     [Parameter(Mandatory, ParameterSetName = 'OAuth_SmtpAddress')]
@@ -170,19 +172,22 @@ function writeLog {
     param(
         [Parameter(Mandatory)]
         [string]$LogName,
-    
+
         [Parameter(Mandatory)]
         [string]$Message,
-    
+
         [Parameter(Mandatory)]
         [System.IO.FileInfo]$Folder,
-    
+
         [ErrorRecord]$ErrorRecord,
-        [datetime]$LogDateTime,
+
+        [Parameter(Mandatory)]
+        [datetime]$LogDateTime = [datetime]::Now,
+
         [switch]$DisableLogging
     )
 
-    if (-not $DisableLogging) {
+    if (-not $DisableLogging -and -not $WhatIfPreference.IsPresent) {
 
         # Check for current log file and if necessary create it.
         $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
@@ -196,15 +201,15 @@ function writeLog {
         }
 
         [string]$Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-                
+
         # Write message to log file:
         $MessageText = "[ $($Date) ] $($Message)"
         switch ($SectionStart) {
 
             $true { $MessageText = "`r`n" + $MessageText }
         }
-        $MessageText | Out-File -FilePath $LogFile -Append
-        
+        $MessageText | Out-File -FilePath $LogFile -Append -Encoding UTF8
+
         # If an error was supplied, write it to the log as well.
         if ($PSBoundParameters.ErrorRecord) {
 
@@ -217,7 +222,7 @@ function writeLog {
             "[$($ErrorRecord.CategoryInfo.Activity)], " +
             "$($ErrorRecord.CategoryInfo.Reason)`r`n" +
             "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)"
-        
+
             "[ $($Date) ][Error] $($ErrorForLog)" | Out-File -FilePath $LogFile -Append
         }
     }
@@ -400,9 +405,20 @@ try {
             }
 
             $ExSvc = New-EwsBinding @ExSvcParams
-            
-            [void](New-SearchFolder -ExSvc $ExSvc -LargeItemSizeMB $LargeItemSizeMB -Archive:$Archive)
-            writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Created search folder 'Large Items ($($LargeItemSizeMB)MB+)'."
+
+            if ($PSCmdlet.ShouldProcess(
+
+                    "Mailbox: $($Mailbox) | Creating a new 'Large Items ($($LargeItemSizeMB)MB+)' search folder.",
+                    "Are you sure you want to create a new 'Large Items ($($LargeItemSizeMB)MB+)' search folder?",
+                    "Mailbox: $($Mailbox)"
+                )
+            ) {
+                [void](New-SearchFolder -ExSvc $ExSvc -LargeItemSizeMB $LargeItemSizeMB -Archive:$Archive)
+                writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Created search folder 'Large Items ($($LargeItemSizeMB)MB+)'."
+            }
+            else {
+                writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Folder creation cancelled (via Confirm prompt)."
+            }
         }
         catch {
             if ($_.Exception.InnerException -match 'A folder with the specified name already exists') {
