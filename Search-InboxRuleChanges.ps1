@@ -51,7 +51,7 @@
     presented in Excel if the process from the link above is followed instead.
 
     .Link
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Search-InboxRuleChanges.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Search-InboxRuleChanges.ps1
 
     .Link
     # [Unified audit log] Audited Activities:

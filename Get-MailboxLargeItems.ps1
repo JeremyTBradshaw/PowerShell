@@ -144,7 +144,7 @@
         [ 2020-11-22 04:20:00 PM ] Get-MailoxLargeItems.ps1 - Script end.
 
     .Link
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxLargeItems.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxLargeItems.ps1
 
     .Link
     https://www.microsoft.com/en-us/download/details.aspx?id=42951 (EWS Managed API 2.2 download)

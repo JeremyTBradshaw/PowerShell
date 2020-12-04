@@ -56,10 +56,10 @@
     Install the EWS Managed API 2.2:  http://www.microsoft.com/en-us/download/details.aspx?id=42951
 
     .Link
-    https://github.com/JeremyTBradshaw/PowerShell/edit/master/New-LargeItemsSearchFolder.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/edit/main/New-LargeItemsSearchFolder.ps1
 
     .Link
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxLargeItems.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxLargeItems.ps1
 
     .Outputs
     # Sample log file (when using -MailboxListCSV):

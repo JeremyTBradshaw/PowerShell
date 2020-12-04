@@ -154,23 +154,23 @@
 
     .Link
 
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Optimize-MailboxTrusteeWebInput.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Optimize-MailboxTrusteeWebInput.ps1
     # ^ Optimize-MailboxTrusteeWebInput.ps1
 
 
     .Link
 
     # Get-MailboxTrustee.ps1
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxTrustee.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrustee.ps1
 
     # Get-MailboxTrusteeWeb.ps1
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxTrusteeWeb.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrusteeWeb.ps1
 
     # Get-MailboxTrusteeWebSQLEdition.ps1
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxTrusteeWebSQLEdition.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrusteeWebSQLEdition.ps1
 
     # New-MailboxTrusteeReverseLookup.ps1
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/New-MailboxTrusteeReverseLookup.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/New-MailboxTrusteeReverseLookup.ps1
 
 #>
 

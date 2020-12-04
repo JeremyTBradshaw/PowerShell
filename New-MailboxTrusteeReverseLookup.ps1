@@ -60,7 +60,7 @@
 
     .Link
 
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/New-MailboxTrusteeReverseLookup.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/New-MailboxTrusteeReverseLookup.ps1
 
 #>
 

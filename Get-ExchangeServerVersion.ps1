@@ -32,7 +32,7 @@
     PSSession.
 
     .Link
-    https://github.com/JeremyTBradshaw/PowerShell/origin/master/Get-ExchangeServerVersion.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/origin/main/Get-ExchangeServerVersion.ps1
 
     .Notes
     Eventually, I would like for this script to be able to dynamically parse Microsoft's docs page - 
@@ -171,7 +171,7 @@ begin {
     }
 
     # Define Exchange server build numbers hashtable
-    # Source: https://github.com/JeremyTBradshaw/PowerShell/blob/master/psd.ExchangeServerBuildNumbers.psd1
+    # Source: https://github.com/JeremyTBradshaw/PowerShell/blob/main/psd.ExchangeServerBuildNumbers.psd1
     $ExchangeServerBuildNumbers = @{
 
         <#

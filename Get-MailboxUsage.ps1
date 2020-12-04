@@ -291,6 +291,6 @@ end {
 
     .Link
 
-    https://github.com/JeremyTBradshaw/PowerShell/blob/master/Get-MailboxUsage.ps1
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxUsage.ps1
 
 #>

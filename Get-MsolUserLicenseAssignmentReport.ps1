@@ -240,7 +240,7 @@ begin {
     #Region Reference Material
 
     # Load hashtable of SkuPartNumber's to product names and service plan friendly names (e.g. ENTERPRISEPACK -> Office 365 E3)
-    # Source: https://github.com/JeremyTBradshaw/PowerShell/blob/master/psd.MSOnlineServicesSkuPartNumberFriendlyNames.psd1
+    # Source: https://github.com/JeremyTBradshaw/PowerShell/blob/main/psd.MSOnlineServicesSkuPartNumberFriendlyNames.psd1
 
     $SkuPartNumberFriendlyNames = @{
 
