@@ -10,6 +10,10 @@
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
     output file (even if there are no large items found).
 
+    The account used for -Credential parameter needs to be assigned the ApplicationImpersonation RBAC role.  The
+    application used for the -AccessToken parameter needs to be setup in Azure AD as an App Registration, configured
+    for app-only authentication (see .Links section).
+
     If the AllItems search folder is not found, the script will attempt to ceate it.  For this reason, the script
     supports ShouldProcess (i.e. -WhatIf / -Confirm).  Specifying -WhatIf will forego logging, outputting to
     CSV, and creating a new AllItems search folder, if one exists.  It won't however forego searching for an existing
@@ -122,20 +126,22 @@
 
     # Sample log file:
     Get-MailboxLargeItems_2020-11-30_14-14-30.log:
-        [ 2020-11-30 02:14:30 PM ] Get-MailoxLargeItems.ps1 - Script begin.
-        [ 2020-11-30 02:14:30 PM ] LargeItemsSizeMB set to 150 MB.
-        [ 2020-11-30 02:14:30 PM ] Searching Primary mailboxes (-Archive switch parameter was not used).
-        [ 2020-11-30 02:14:30 PM ] Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv of any larged items that are found).
-        [ 2020-11-30 02:14:30 PM ] Output CSV: C:\Users\ExAdmin123\Desktop\Scripts\Get-MailboxLargeItems_Outputs\MailboxLargeItems_2020-11-30_14-14-30.csv
-        [ 2020-11-30 02:14:31 PM ] Successfully verified version and imported EWS Managed API 2.2 DLL (with Import-Module).
-        [ 2020-11-30 02:14:31 PM ] Successfully imported $MailboxListCSV, with 420 mailboxes to process.
+        [ 2020-12-03 02:14:30 PM ] Get-MailoxLargeItems.ps1 - Script begin.
+        [ 2020-12-03 02:14:30 PM ] PSScriptRoot: C:\Users\ExAdmin123\
+        [ 2020-12-03 02:14:30 PM ] Command: .\Get-MailboxLargeItems.ps1 -AccessToken $EwsToken -MailboxListCSV .\Desktop\users.csv
+        [ 2020-12-03 02:14:30 PM ] Authentication: OAuth (Exchange Online)
+        [ 2020-12-03 02:14:30 PM ] LargeItemsSizeMB set to 150 MB.
+        [ 2020-12-03 02:14:31 PM ] Searching Primary mailboxes (-Archive switch parameter was not used).
+        [ 2020-12-03 02:14:31 PM ] Successfully imported mailbox list CSV '.\Desktop\users.csv'.
+        [ 2020-12-03 02:14:31 PM ] Will process 420 mailboxes.
+        [ 2020-12-03 02:14:31 PM ] Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv of any larged items that are found).
+        [ 2020-12-03 02:14:31 PM ] Output CSV: C:\Users\ExAdmin123\Get-MailboxLargeItems_Outputs\MailboxLargeItems_2020-11-30_14-14-30.csv
+        [ 2020-12-03 02:14:31 PM ] Successfully verified version and imported EWS Managed API 2.2 DLL (with Import-Module).
         [ 2020-11-30 02:14:31 PM ] Mailbox: 1 of 420
-        [ 2020-11-30 02:14:32 PM ] Mailbox: Larry.Iceberg@jb365.ca | Connecting to EWS as contoso\ExAdmin123.
         [ 2020-11-30 02:14:32 PM ] Mailbox: Larry.Iceberg@jb365.ca | Found 'AllItems' search folder.  Searching it...
         [ 2020-11-30 02:14:32 PM ] Mailbox: Larry.Iceberg@jb365.ca | Found 5 large items.
         [ 2020-11-30 02:14:32 PM ] Mailbox: Larry.Iceberg@jb365.ca | Writing large items to output CSV.
         [ 2020-11-30 02:14:53 PM ] Mailbox: 2 of 420
-        [ 2020-11-30 02:14:53 PM ] Mailbox: Louis.Isaacson@jb365.ca | Connecting to EWS as contoso\ExAdmin123.
         [ 2020-11-30 02:14:53 PM ] Mailbox: Louis.Isaacson@jb365.ca | Found 'AllItems' search folder.  Searching it...
         [ 2020-11-30 02:14:31 PM ] Mailbox: Louis.Isaacson@jb365.ca | Found 27 large items.
         [ 2020-11-30 02:14:52 PM ] Mailbox: Louis.Isaacson@jb365.ca | Writing large items to output CSV.
@@ -154,7 +160,6 @@
 
     .Link
     https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/how-to-authenticate-an-ews-application-by-using-oauth
-
 #>
 #Requires -Version 5.1 -PSEdition Desktop
 using namespace System.Management.Automation
@@ -319,12 +324,7 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
 
 function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
 
-    if ($Archive) {
-        $AllItemsParentFolder = [WellKnownFolderName]::ArchiveRoot
-    }
-    else { $AllItemsParentFolder = [WellKnownFolderName]::Root }
-
-    $AllItemsSearchFolder = $null
+    $AllItemsParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
 
     $FolderView = [FolderView]::new(1)
     $FolderView.Traversal = [FolderTraversal]::Shallow
@@ -341,6 +341,7 @@ function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
             2 #<--: PR_FOLDER_TYPE = 2 (a.k.a. Search Folder (vs regular folder))
         ))
 
+    $AllItemsSearchFolder = $null
     $AllItemsSearchFolder = $ExSvc.FindFolders(
 
         [FolderId]::new($AllItemsParentFolder, $ExSvc.ImpersonatedUserId.Id),
@@ -522,7 +523,7 @@ try {
             writeLog @writeLogParams -Message 'Searching Archive mailboxes (-Archive switch parameter was used).'
         }
         else {
-            writeLog @writeLogParams -Message 'Searching Primary mailboxes (-Archive/-RecoverableItems switch parameters were not used).'
+            writeLog @writeLogParams -Message 'Searching Primary mailboxes (-Archive switch parameter was not used).'
         }
 
         $Mailboxes += Import-Csv $MailboxListCSV -ErrorAction Stop
