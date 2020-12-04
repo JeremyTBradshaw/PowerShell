@@ -101,9 +101,9 @@ process {
                 Write-Warning -Message 'Exchange 2010 server detected.  Re-run the script with -Credential parameter (required for Invoke-Command to work).'
 
                 $ExVersionOutput |
-                    Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
-                    Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
-                    Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown 
+                Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
+                Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
+                Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown 
             }
             else {
                 try {
@@ -114,39 +114,39 @@ process {
                     } -ErrorAction Stop
 
                     $ProductName = ($ExchangeServerBuildNumbers.GetEnumerator() |
-                            Select-Object -Index ($ExchangeServerLongBuildNumbers.IndexOf("$($exsetup.FileVersion)"))).Name
+                        Select-Object -Index ($ExchangeServerLongBuildNumbers.IndexOf("$($exsetup.FileVersion)"))).Name
 
                     $ExVersionOutput |
-                        Add-Member -NotePropertyName ProductName  -NotePropertyValue $ProductName -PassThru |
-                        Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Long -PassThru |
-                        Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Short
+                    Add-Member -NotePropertyName ProductName  -NotePropertyValue $ProductName -PassThru |
+                    Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Long -PassThru |
+                    Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Short
                 }
                 catch {
                     Write-Warning -Message "Failed on Invoke-Command to server $($Server.Name)."
 
                     $ExVersionOutput |
-                        Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
-                        Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
-                        Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown 
+                    Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
+                    Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
+                    Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown 
                 }
             }
         }
         elseif ($AdminDisplayVersion[1] -match '(15)|(16)') {
 
             $ProductName = ($ExchangeServerBuildNumbers.GetEnumerator() |
-                    Select-Object -Index ($ExchangeServerShortBuildNumbers.IndexOf("$($AdminDisplayVersion[1,3] -join '.')"))).Name
+                Select-Object -Index ($ExchangeServerShortBuildNumbers.IndexOf("$($AdminDisplayVersion[1,3] -join '.')"))).Name
 
             $ExVersionOutput |
-                Add-Member -NotePropertyName ProductName  -NotePropertyValue $ProductName -PassThru |
-                Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Long -PassThru |
-                Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Short
+            Add-Member -NotePropertyName ProductName  -NotePropertyValue $ProductName -PassThru |
+            Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Long -PassThru |
+            Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue $ExchangeServerBuildNumbers["$($ProductName)"].BuildNumber_Short
         }
         else {
             Write-Warning -Message "Server '$Server.Name' couldn't be matched to a known Exchange version (AdminDisplayVersion: $($Server.AdminDisplayVersion))."
             $ExVersionOutput |
-                Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
-                Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
-                Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown
+            Add-Member -NotePropertyName ProductName  -NotePropertyValue Unknown -PassThru |
+            Add-Member -NotePropertyName BuildNumber_Long  -NotePropertyValue Unknown -PassThru |
+            Add-Member -NotePropertyName BuildNumber_Short -NotePropertyValue Unknown
         }
 
         if ($ExVersionOutput) { Write-Output -InputObject $ExVersionOutput }
@@ -158,7 +158,7 @@ begin {
     Write-Verbose -Message "Checking for Exchange PSSession."
 
     [PSSession[]]$ExPSSession = Get-PSSession |
-        Where-Object { $_.ConfigurationName -eq 'Microsoft.Exchange' -and $_.ComputerName -ne 'outlook.office365.com' }
+    Where-Object { $_.ConfigurationName -eq 'Microsoft.Exchange' -and $_.ComputerName -ne 'outlook.office365.com' }
 
     if ($ExPSSession.Count -eq 1) {
 
@@ -180,7 +180,16 @@ begin {
         #>
     
         #Region 2019
-    
+        'Exchange Server 2019 CU7'                                   = @{
+            'BuildNumber_Long'  = '15.02.0721.002'
+            'BuildNumber_Short' = '15.2.721.2'
+            'ReleaseDate'       = '9/20/2020'
+        }
+        'Exchange Server 2019 CU6'                                   = @{
+            'BuildNumber_Long'  = '15.02.0659.004'
+            'BuildNumber_Short' = '15.2.659.4'
+            'ReleaseDate'       = '6/16/2020'
+        }
         'Exchange Server 2019 CU5'                                   = @{
             'BuildNumber_Long'  = '15.02.0595.003'
             'BuildNumber_Short' = '15.2.595.3'
@@ -216,10 +225,19 @@ begin {
             'BuildNumber_Short' = '15.2.196.0'
             'ReleaseDate'       = '7/24/2018'
         }
-    
         #EndRegion 2019
+
         #Region 2016
-    
+        'Exchange Server 2016 CU18'                                  = @{
+            'BuildNumber_Long'  = '15.01.2106.002'
+            'BuildNumber_Short' = '15.1.2106.2'
+            'ReleaseDate'       = '9/15/2020'
+        }
+        'Exchange Server 2016 CU17'                                  = @{
+            'BuildNumber_Long'  = '15.01.2044.004'
+            'BuildNumber_Short' = '15.1.2044.4'
+            'ReleaseDate'       = '6/16/2020'
+        }
         'Exchange Server 2016 CU16'                                  = @{
             'BuildNumber_Long'  = '15.01.1979.003'
             'BuildNumber_Short' = '15.1.1979.3'
@@ -310,10 +328,9 @@ begin {
             'BuildNumber_Short' = '15.1.225.16'
             'ReleaseDate'       = '7/22/2015'
         }
-    
         #EndRegion 2016
+
         #Region 2013
-    
         'Exchange Server 2013 CU23'                                  = @{
             'BuildNumber_Long'  = '15.00.1497.002'
             'BuildNumber_Short' = '15.0.1497.2'
@@ -434,10 +451,9 @@ begin {
             'BuildNumber_Short' = '15.0.516.32'
             'ReleaseDate'       = '12/3/2012'
         }
-    
         #EndRegion 2013
+
         #Region 2010
-    
         'Update Rollup 30 for Exchange Server 2010 SP3'              = @{
             'BuildNumber_Long'  = '14.03.0496.000'
             'BuildNumber_Short' = '14.3.496.0'
@@ -738,7 +754,6 @@ begin {
             'BuildNumber_Short' = '14.0.639.21'
             'ReleaseDate'       = '11/9/2009'
         }
-    
         #EndRegion 2010
     }
     $ExchangeServerLongBuildNumbers = $ExchangeServerBuildNumbers.Values.BuildNumber_Long
