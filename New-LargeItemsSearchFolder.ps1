@@ -254,7 +254,7 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
 
     # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
     $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
-    $ExSvc.UserAgent = 'Get-MailboxLargeItems.ps1'
+    $ExSvc.UserAgent = 'New-LargeItemsSearchFolder.ps1'
 
     $ExSvc
 }
