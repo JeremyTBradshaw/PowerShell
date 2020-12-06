@@ -407,7 +407,7 @@ function Get-LargeItems ($ExSvc, $Mailbox, $FolderId, $LargeItemSizeMB, [switch]
 
     $SearchFilter = [SearchFilter+IsGreaterThanOrEqualTo]::new(
 
-        [ItemSchema]::Size, ($LargeItemSizeMB * 1KB)
+        [ItemSchema]::Size, ($LargeItemSizeMB * 1MB)
     )
 
     $LargeItems = @()
@@ -508,7 +508,7 @@ function Get-OAuthUserSmtpAddress ($ExSvc) {
     $ExSvc.ConvertId(
         [AlternateId]::New(
             'EwsId',
-            ([Folder]::Bind($ExSvc, 'Inbox')).Id.UniqueId, 
+            ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId, 
             'OAuthUserSmtpFinder@LargeItems.ps1'
         ),
         'EwsId'
