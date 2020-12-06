@@ -126,6 +126,8 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [PSCredential]$Credential,
 
+    [switch]$UseImpersonation,
+
     [ValidateScript(
         {
             if (Test-Path -Path $_) { $true } else {
@@ -166,6 +168,24 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [uri]$EwsUrl
 )
+
+if (-not $UseImpersonation) {
+
+    $RequireImpersonation = $false
+
+    if ($PSCmdlet.ParameterSetName -like '*_CSV' -and (Get-Content -Path $MailboxListCSV -First 3).Count -eq 3) {
+
+        $RequireImpersonation = $true
+    }
+    elseif ($MailboxSmtpAddress.Count -gt 1) {
+
+        $RequireImpersonation = $true
+    }
+    if ($RequireImpersonation) {
+
+        throw 'To process more than one mailbox, use the -UseImpersonation switch.' 
+    }
+}
 
 #region Functions
 function writeLog {
@@ -247,13 +267,17 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
         $ExSvc.Url = $Url.AbsoluteUri
     }
 
-    $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
+    if ($Script:UseImpersonation) {
 
-        [ConnectingIdType]::SmtpAddress, $Mailbox
-    )
+        $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
 
-    # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
-    $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
+            [ConnectingIdType]::SmtpAddress, $Mailbox
+        )
+
+        # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
+        $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
+    }
+
     $ExSvc.UserAgent = 'New-LargeItemsSearchFolder.ps1'
 
     $ExSvc
@@ -288,6 +312,19 @@ function New-SearchFolder ($ExSvc, $LargeItemSizeMB, [switch]$Archive) {
         $SearchFolder.SearchParameters.RootFolderIds.Add('MsgFolderRoot')
         $SearchFolder.Save('SearchFolders')
     }
+}
+
+function Get-OAuthUserSmtpAddress ($ExSvc) {
+
+    $ExSvc.ConvertId(
+        [AlternateId]::New(
+            'EwsId',
+            ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId, 
+            'OAuthUserSmtpFinder@LargeItems.ps1'
+        ),
+        'EwsId'
+
+    ).Mailbox 
 }
 #endregion Functions
 
@@ -349,7 +386,7 @@ try {
 
         foreach ($sA in $MailboxSmtpAddress) {
 
-            $Mailboxes += [PSCustomObject]@{ SmtpAddress = $SmtpAddress }
+            $Mailboxes += [PSCustomObject]@{ SmtpAddress = $sA }
         }
     }
 
@@ -381,7 +418,6 @@ try {
         $MailboxCounter++
 
         $MainProgressParams['Status'] = "Creating 'Large Items ($($LargeItemSizeMB)MB+)' folder | Mailbox $($MailboxCounter) of $($Mailboxes.Count)"
-        $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
         $MainProgressParams['PercentComplete']  = (($MailboxCounter / $Mailboxes.Count) * 100)
 
         if ($Archive) {
@@ -405,6 +441,14 @@ try {
             }
 
             $ExSvc = New-EwsBinding @ExSvcParams
+
+            # In case the supplied SmtpAddress is not that of the actual OAuth-authenticated user:
+            if (-not $UseImpersonation -and $PSCmdlet.ParameterSetName -like 'OAuth*') {
+
+                $Mailbox = Get-OAuthUserSmtpAddress -ExSvc $ExSvc
+            }
+
+            $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
 
             if ($PSCmdlet.ShouldProcess(
 

@@ -187,6 +187,8 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [PSCredential]$Credential,
 
+    [switch]$UseImpersonation,
+
     [ValidateScript(
         {
             if (Test-Path -Path $_) { $true } else {
@@ -227,6 +229,24 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [uri]$EwsUrl
 )
+
+if (-not $UseImpersonation) {
+
+    $RequireImpersonation = $false
+
+    if ($PSCmdlet.ParameterSetName -like '*_CSV' -and (Get-Content -Path $MailboxListCSV -First 3).Count -eq 3) {
+
+        $RequireImpersonation = $true
+    }
+    elseif ($MailboxSmtpAddress.Count -gt 1) {
+
+        $RequireImpersonation = $true
+    }
+    if ($RequireImpersonation) {
+
+        throw 'To process more than one mailbox, use the -UseImpersonation switch.' 
+    }
+}
 
 #region Functions
 function writeLog {
@@ -308,13 +328,17 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
         $ExSvc.Url = $Url.AbsoluteUri
     }
 
-    $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
+    if ($Script:UseImpersonation) {
 
-        [ConnectingIdType]::SmtpAddress, $Mailbox
-    )
+        $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
 
-    # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
-    $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
+            [ConnectingIdType]::SmtpAddress, $Mailbox
+        )
+
+        # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
+        $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
+    }
+
     $ExSvc.UserAgent = 'Get-MailboxLargeItems.ps1'
 
     # Increase the timeout by 50% (default is 100,000) to cater to large mailboxes:
@@ -322,7 +346,7 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
     $ExSvc
 }
 
-function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
+function Get-AllItemsSearchFolder ($ExSvc, $Mailbox, [switch]$Archive) {
 
     $AllItemsParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
 
@@ -344,7 +368,7 @@ function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
     $AllItemsSearchFolder = $null
     $AllItemsSearchFolder = $ExSvc.FindFolders(
 
-        [FolderId]::new($AllItemsParentFolder, $ExSvc.ImpersonatedUserId.Id),
+        [FolderId]::new($AllItemsParentFolder, $Mailbox),
         $SearchFilterCollection,
         $FolderView
     )
@@ -352,7 +376,7 @@ function Get-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
     $AllItemsSearchFolder
 }
 
-function New-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
+function New-AllItemsSearchFolder ($ExSvc, $Mailbox, [switch]$Archive) {
 
     $AllItemsParentFolder = if ($Archive) { 'ArchiveRoot' } else { 'Root' }
     $SearhRootFolder = if ($Archive) { 'ArchiveMsgFolderRoot' } else { 'MsgFolderRoot' }
@@ -365,11 +389,11 @@ function New-AllItemsSearchFolder ($ExSvc, [switch]$Archive) {
 
     $AllItemsSearchFolder.Save(
 
-        [FolderId]::new($AllItemsParentFolder, $ExSvc.ImpersonatedUserId.Id)
+        [FolderId]::new($AllItemsParentFolder, $Mailbox)
     )
 }
 
-function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) {
+function Get-LargeItems ($ExSvc, $Mailbox, $FolderId, $LargeItemSizeMB, [switch]$Archive) {
 
     $ProgressParams = @{
 
@@ -383,7 +407,7 @@ function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) 
 
     $SearchFilter = [SearchFilter+IsGreaterThanOrEqualTo]::new(
 
-        [ItemSchema]::Size, ($LargeItemSizeMB * 1MB)
+        [ItemSchema]::Size, ($LargeItemSizeMB * 1KB)
     )
 
     $LargeItems = @()
@@ -448,7 +472,7 @@ function Get-LargeItems ($ExSvc, $FolderId, $LargeItemSizeMB, [switch]$Archive) 
 
         [PSCustomObject]@{
 
-            Mailbox         = $ExSvc.ImpersonatedUserId.Id
+            Mailbox         = $Mailbox
             MailboxLocation = if ($Archive) { 'Archive Mailbox' } else { 'Primary Mailbox' }
             ItemClass       = $Item.ItemClass
             Subject         = $Item.Subject
@@ -477,6 +501,19 @@ function Get-FolderPath ($ExSvc, $FolderId, [switch]$Archive) {
 
     [System.Array]::Reverse($FolderPath)
     $FolderPath -join '\' -replace 'Top of Information Store'
+}
+
+function Get-OAuthUserSmtpAddress ($ExSvc) {
+
+    $ExSvc.ConvertId(
+        [AlternateId]::New(
+            'EwsId',
+            ([Folder]::Bind($ExSvc, 'Inbox')).Id.UniqueId, 
+            'OAuthUserSmtpFinder@LargeItems.ps1'
+        ),
+        'EwsId'
+
+    ).Mailbox 
 }
 #endregion Functions
 
@@ -573,7 +610,6 @@ try {
         $MailboxCounter++
 
         $MainProgressParams['Status'] = "Finding large items ($($LargeItemSizeMB)+ MB) | Mailbox $($MailboxCounter) of $($Mailboxes.Count)"
-        $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
         $MainProgressParams['PercentComplete'] = (($MailboxCounter / $Mailboxes.Count) * 100)
 
         if ($Archive) {
@@ -599,8 +635,16 @@ try {
 
             $ExSvc = New-EwsBinding @ExSvcParams
 
+            # In case the supplied SmtpAddress is not that of the actual OAuth-authenticated user:
+            if (-not $UseImpersonation -and $PSCmdlet.ParameterSetName -like 'OAuth*') {
+
+                $Mailbox = Get-OAuthUserSmtpAddress -ExSvc $ExSvc
+            }
+
+            $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
+
             $AllItemsSearchFolder = $null
-            $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive
+            $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive
 
             if (-not $AllItemsSearchFolder) {
 
@@ -614,13 +658,13 @@ try {
                         "Are you sure you want to create a new 'AllItems' hidden search folder?",
                         $currentMsg
                     )) {
-                    [void](New-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive)
+                    [void](New-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive)
 
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Created new 'AllItems' hidden search folder."
 
                     Start-Sleep -Seconds 3 #<--: Not expected often so 3 seconds is acceptable.
 
-                    $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Archive:$Archive
+                    $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive
 
                     if (-not $AllItemsSearchFolder) { throw 90210 }
                 }
@@ -633,6 +677,7 @@ try {
                 $getLargeItemsParams = @{
 
                     ExSvc           = $ExSvc
+                    Mailbox         = $Mailbox
                     FolderId        = $AllItemsSearchFolder.Id
                     LargeItemSizeMB = $LargeItemSizeMB
                     Archive         = $Archive
