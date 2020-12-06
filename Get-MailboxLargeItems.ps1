@@ -8,11 +8,10 @@
     mailboxes being searched).
 
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
-    output file (even if there are no large items found).
-
-    The account used for -Credential parameter needs to be assigned the ApplicationImpersonation RBAC role.  The
-    application used for the -AccessToken parameter needs to be setup in Azure AD as an App Registration, configured
-    for app-only authentication (see .Links section).
+    output file (even if there are no large items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
+    parameters, impersonation is implied and the account used for -Credential parameter needs to be assigned the
+    ApplicationImpersonation RBAC role, or the application used for the -AccessToken parameter needs to be setup in
+    Azure AD as an App Registration, configured for app-only authentication (see .Links section).
 
     If the AllItems search folder is not found, the script will attempt to ceate it.  For this reason, the script
     supports ShouldProcess (i.e. -WhatIf / -Confirm).  Specifying -WhatIf will forego logging, outputting to
@@ -30,7 +29,8 @@
 
     .Parameter AccessToken
     Specifies an access token object (e.g. from New-EwsAccessToken (EwsOAuthAppOnlyEssentials PS module)) for the
-    Azure AD application/app registration to be used for connecting to EWS using OAuth.
+    Azure AD application/app registration to be used for connecting to EWS using OAuth.  Delegated OAuth tokens are
+    supported and will be documented here in more detail soon.
 
     .Parameter Credential
     Specifies a PSCredential object for the account to be used for connecting to EWS using Basic Authentication.
@@ -59,6 +59,11 @@
     Specifies the URL for the Exchange Web Services endpoint.  Required when using -Credential paramter (i.e.
     Basic authentication) and regardless of whether connecting to Exchange on-premises or Exchange Online.  If using
     -AccessToken (i.e. OAuth), Exchange Online's EWS URL is automatically used instead.
+
+    .Example
+    .\Get-MailboxLargeItems -AccessToken $DelegatedAccessToken
+
+    # Search the mailbox of the user for the delegated access token.
 
     .Example
     $EwsToken = New-EwsAccessToken -TenantId 832c3217-760c-4d87-9386-efcbb4a965e5 `
@@ -166,11 +171,12 @@ using namespace System.Management.Automation
 using namespace Microsoft.Exchange.WebServices.Data
 
 [CmdletBinding(
-    DefaultParameterSetName = 'OAuth_SmtpAddress',
+    DefaultParameterSetName = 'OAuth_NoImpersonation',
     SupportsShouldProcess = $true,
     ConfirmImpact = 'High'
 )]
 param(
+    [Parameter(Mandatory, ParameterSetName = 'OAuth_NoImpersonation')]
     [Parameter(Mandatory, ParameterSetName = 'OAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'OAuth_CSV')]
     [ValidateScript(
@@ -183,11 +189,15 @@ param(
     )]
     [Object]$AccessToken,
 
+    [Parameter(Mandatory, ParameterSetName = 'BasicAuth_NoImpersonation')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [PSCredential]$Credential,
 
-    [switch]$UseImpersonation,
+    # [Parameter(ParameterSetName = 'OAuth_NoImpersonation')]
+    # [Parameter(ParameterSetName = 'BasicAuth_NoImpersonation')]
+    # [ValidateSet(1)]
+    # [switch]$NoImpersonation,
 
     [ValidateScript(
         {
@@ -229,24 +239,6 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [uri]$EwsUrl
 )
-
-if (-not $UseImpersonation) {
-
-    $RequireImpersonation = $false
-
-    if ($PSCmdlet.ParameterSetName -like '*_CSV' -and (Get-Content -Path $MailboxListCSV -First 3).Count -eq 3) {
-
-        $RequireImpersonation = $true
-    }
-    elseif ($MailboxSmtpAddress.Count -gt 1) {
-
-        $RequireImpersonation = $true
-    }
-    if ($RequireImpersonation) {
-
-        throw 'To process more than one mailbox, use the -UseImpersonation switch.' 
-    }
-}
 
 #region Functions
 function writeLog {
@@ -328,7 +320,7 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
         $ExSvc.Url = $Url.AbsoluteUri
     }
 
-    if ($Script:UseImpersonation) {
+    if (-not ($PSCmdlet.ParameterSetName -like '*NoImpersonation')) {
 
         $ExSvc.ImpersonatedUserId = [ImpersonatedUserId]::new(
 
@@ -503,13 +495,13 @@ function Get-FolderPath ($ExSvc, $FolderId, [switch]$Archive) {
     $FolderPath -join '\' -replace 'Top of Information Store'
 }
 
-function Get-OAuthUserSmtpAddress ($ExSvc) {
+function Get-ConnectingUserSmtpAddress ($ExSvc) {
 
     $ExSvc.ConvertId(
         [AlternateId]::New(
             'EwsId',
             ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId, 
-            'OAuthUserSmtpFinder@LargeItems.ps1'
+            'ConnectingUserSmtpFinder@EwsApi.ps1'
         ),
         'EwsId'
 
@@ -575,12 +567,19 @@ try {
         writeLog @writeLogParams "Output CSV: $($OutputCSV)"
     }
     else {
-        # Disable logging and forego output CSV.
+        # Disable logging.
         $writeLogParams['DisableLogging'] = $true
 
-        foreach ($sA in $MailboxSmtpAddress) {
+        if ($PSCmdlet.ParameterSetName -like '*_SmtpAddress') {
 
-            $Mailboxes += [PSCustomObject]@{ SmtpAddress = $sA }
+            foreach ($sA in $MailboxSmtpAddress) {
+    
+                $Mailboxes += [PSCustomObject]@{ SmtpAddress = $sA }
+            }
+        }
+        else {
+            # Set a placeholder SmtpAddress for the user of the -AccessToken / -Credential:
+            $Mailboxes += [PSCustomObject]@{ SmtpAddress = 'ConnectingUserSmtpFinder@EwsApi.ps1' }
         }
     }
 
@@ -635,10 +634,10 @@ try {
 
             $ExSvc = New-EwsBinding @ExSvcParams
 
-            # In case the supplied SmtpAddress is not that of the actual OAuth-authenticated user:
-            if (-not $UseImpersonation -and $PSCmdlet.ParameterSetName -like 'OAuth*') {
+            # Attempt to find SmtpAddress connecting/authenticating user:
+            if ($PSCmdlet.ParameterSetName -like '*NoImpersonation') {
 
-                $Mailbox = Get-OAuthUserSmtpAddress -ExSvc $ExSvc
+                $Mailbox = Get-ConnectingUserSmtpAddress -ExSvc $ExSvc
             }
 
             $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
@@ -739,6 +738,16 @@ try {
 
                 Write-Warning -Message $currentMsg
                 writeLog @writeLogParams -Message $currentMsg
+            }
+            elseif ($_.Exception.InnerException -match '(ExchangeImpersonation SOAP header must be present for this type of OAuth token\.)') {
+
+                $currentMsg = $null
+                $currentMsg = 'The supplied access token appears to be for app-only authentication, and therefore impersonation must be used.  ' +
+                'For this kind of access token, supply either -MailboxListCSV or -MailboxSmtpAddress.  ' +
+                'Otherwise, provide a delegated authorization access token.'
+
+                Write-Warning -Message $currentMsg
+                break
             }
             else {
                 $currentMsg = $null
