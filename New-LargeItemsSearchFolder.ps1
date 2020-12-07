@@ -468,6 +468,10 @@ try {
             }
         }
         catch {
+            # Depends on PSVersion 5.1, or for PSVersions 6+ - $DebugPreference set to 'Inquire':
+            $debugHelpMessage = 'Suspend the script here to investigate the error (e.g. check $ExSvc.HttpResponseHeaders). ' +
+            'Otherwise, unless Halted, or if the error is script-ending, the script will continue.'
+
             if ($_.Exception.InnerException -match 'A folder with the specified name already exists') {
 
                 $currentMsg = $null
@@ -536,9 +540,10 @@ try {
                 Write-Warning -Message $currentMsg
                 writeLog @writeLogParams -Message $currentMsg -ErrorRecord $_
                 Write-Error $_
+                Write-Debug -Message $debugHelpMessage
                 break
             }
-            Write-Debug -Message 'Suspend the script here to investigate the error. Otherwise, unless Halted, the script will continue.'
+            Write-Debug -Message $debugHelpMessage
         }	
     }
     #endregion Mailbox Loop
@@ -549,6 +554,7 @@ catch {
 
     Write-Warning -Message $currentMsg
     writeLog @writeLogParams -Message $currentMsg
+    Write-Debug -Message $debugHelpMessage
     throw $_
 }
 
