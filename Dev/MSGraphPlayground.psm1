@@ -62,9 +62,14 @@ function New-DeviceCodeAccessToken {
     if ($sw1.Elapsed.Minutes -lt 15) {
 
         $sw2 = [Diagnostics.Stopwatch]::StartNew()
-        $trResponse = $null
+        $successfulResponse = $false
+        $pollCount = 0
         do {
             if ($sw2.Elapsed.Seconds -ge $dcrResponse.interval) {
+
+                $sw2.Restart()
+                $pollCount++
+
                 try {
                     $trParams = @{
     
@@ -75,8 +80,7 @@ function New-DeviceCodeAccessToken {
                         ErrorAction = 'Stop'
                     }
                     $trResponse = Invoke-RestMethod @trParams
-
-                    $sw2.Restart()
+                    $successfulResponse = $true
                 }
                 catch {
                     if ($_.ErrorDetails.Message) {
@@ -85,8 +89,12 @@ function New-DeviceCodeAccessToken {
     
                         if ($badResponse.error -eq 'authorization_pending') {
                         
-                            Write-Warning "The user hasn't finished authenticating, but hasn't canceled the flow (error: authorization_pending)."
-                            Write-Warning "Continuing to poll the token endpoint at the requested interval ($($dcrReponse.interval) seconds)"
+                            if ($pollCount -eq 1) {
+
+                                "The user hasn't finished authenticating, but hasn't canceled the flow (error: authorization_pending).  " +
+                                "Continuing to poll the token endpoint at the requested interval ($($dcrResponse.interval) seconds)." |
+                                Write-Warning
+                            }
                         }
                         elseif ($badResponse.error -match '^(authorization_declined)|(bad_verification_code)|(expired_token)$') {
 
@@ -104,9 +112,9 @@ function New-DeviceCodeAccessToken {
                     }
                 }
             }
-            if (-not $trResponse) { Start-Sleep -Seconds 1 }
+            if (-not $successfulResponse) { Start-Sleep -Seconds 1 }
         }
-        while ($sw1.Elapsed.Minutes -lt 15 -and -not $trResponse)
+        while ($sw1.Elapsed.Minutes -lt 15 -and -not $successfulResponse)
 
         # Output the token request response:
         $trResponse
