@@ -235,6 +235,7 @@ param(
 
     [switch]$Archive,
 
+    [Parameter(Mandatory, ParameterSetName = 'BasicAuth_NoImpersonation')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [uri]$EwsUrl
