@@ -9,11 +9,15 @@
     provide users with this new search folder and advise them to backup the items it finds so they don't lose them
     during their migration.
 
-    When using -MailboxListCSV, a logs folder will be created in the same directory as the script.  When using either
-    -MailboxListCSV or -MailboxSmtpAddress parameters, impersonation is implied and the account used for -Credential
-    parameter needs to be assigned the ApplicationImpersonation RBAC role, or the application used for the -AccessToken
-    parameter needs to be setup in Azure AD as an App Registration, configured for app-only authentication (see .Links
-    section).
+    When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
+    output file (even if there are no large items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
+    parameters, impersonation is implied and the account used for -Credential parameter needs to be assigned the
+    ApplicationImpersonation RBAC role, at least for the scope of the mailboxes being searched.  Similarly, If
+    -MailboxListCSV or -MailboxSmtpAddress are used with the -AccessToken parameter, the application used for
+    the -AccessToken parameter needs to be setup in Azure AD as an App Registration, and, if the access token is an
+    App-Only token, the application must be configured for app-only authentication (see .Links section), or if the 
+    token is a delegated token, the user of the token must have the ApplicationImpersonation RBAC role assigned, at
+    least for the scope of the mailboxes being searched.
 
     .Parameter AccessToken
     Specifies an access token object (e.g. from New-EwsAccessToken (EwsOAuthAppOnlyEssentials PS module)) for the
@@ -173,6 +177,7 @@ param(
 
     [switch]$Archive,
 
+    [Parameter(Mandatory, ParameterSetName = 'BasicAuth_NoImpersonation')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [uri]$EwsUrl
