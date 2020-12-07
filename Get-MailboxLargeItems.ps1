@@ -10,8 +10,12 @@
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
     output file (even if there are no large items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
     parameters, impersonation is implied and the account used for -Credential parameter needs to be assigned the
-    ApplicationImpersonation RBAC role, or the application used for the -AccessToken parameter needs to be setup in
-    Azure AD as an App Registration, configured for app-only authentication (see .Links section).
+    ApplicationImpersonation RBAC role, at least for the scope of the mailboxes being searched.  Similarly, If
+    -MailboxListCSV or -MailboxSmtpAddress are used with the -AccessToken parameter, the application used for
+    the -AccessToken parameter needs to be setup in Azure AD as an App Registration, and, if the access token is an
+    App-Only token, the application must be configured for app-only authentication (see .Links section), or if the 
+    token is a delegated token, the user of the token must have the ApplicationImpersonation RBAC role assigned, at
+    least for the scope of the mailboxes being searched.
 
     If the AllItems search folder is not found, the script will attempt to ceate it.  For this reason, the script
     supports ShouldProcess (i.e. -WhatIf / -Confirm).  Specifying -WhatIf will forego logging, outputting to
@@ -171,7 +175,7 @@ using namespace System.Management.Automation
 using namespace Microsoft.Exchange.WebServices.Data
 
 [CmdletBinding(
-    DefaultParameterSetName = 'OAuth_NoImpersonation',
+    DefaultParameterSetName = 'BasicAuth_NoImpersonation',
     SupportsShouldProcess = $true,
     ConfirmImpact = 'High'
 )]
@@ -193,11 +197,6 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
     [PSCredential]$Credential,
-
-    # [Parameter(ParameterSetName = 'OAuth_NoImpersonation')]
-    # [Parameter(ParameterSetName = 'BasicAuth_NoImpersonation')]
-    # [ValidateSet(1)]
-    # [switch]$NoImpersonation,
 
     [ValidateScript(
         {
@@ -700,6 +699,10 @@ try {
             }
         }
         catch {
+            # Depends on PSVersion 5.1, or for PSVersions 6+ - $DebugPreference set to 'Inquire':
+            $debugHelpMessage = 'Suspend the script here to investigate the error (e.g. check $ExSvc.HttpResponseHeaders). ' +
+            'Otherwise, unless Halted, or if the error is script-ending, the script will continue.'
+
             if ($_ -match '(90210)') {
                 $currentMsg = "Mailbox $($Mailbox) | Newly created 'AllItems' folder is still not availalbe.  Try again later."
 
@@ -757,9 +760,10 @@ try {
                 Write-Warning -Message $currentMsg
                 writeLog @writeLogParams -Message $currentMsg -ErrorRecord $_
                 Write-Error $_
+                Write-Debug -Message $debugHelpMessage
                 break
             }
-            Write-Debug -Message 'Suspend the script here to investigate the error. Otherwise, unless Halted, the script will continue.'
+            Write-Debug -Message $debugHelpMessage
         }	
     }
     #endregion Mailbox Loop
@@ -770,6 +774,7 @@ catch {
 
     Write-Warning -Message $currentMsg
     writeLog @writeLogParams -Message $currentMsg
+    Write-Debug -Message $debugHelpMessage
     throw $_
 }
 
