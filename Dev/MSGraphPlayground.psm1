@@ -341,16 +341,16 @@ function ConvertFrom-JWT {
     
     [PSCustomObject]@{
 
-        Headers = ([System.Text.Encoding]::ASCII.GetString(
+        Headers = [System.Text.Encoding]::ASCII.GetString(
 
             [Convert]::FromBase64String((ConvertFrom-Base64Url $Headers))
         ) |
-        ConvertFrom-Json)
+        ConvertFrom-Json
 
-        Claims = ([System.Text.Encoding]::ASCII.GetString(
+        Claims = [System.Text.Encoding]::ASCII.GetString(
         
             [Convert]::FromBase64String((ConvertFrom-Base64Url $Claims))
         ) |
-        ConvertFrom-Json)
+        ConvertFrom-Json
     }
 }
