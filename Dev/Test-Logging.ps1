@@ -21,71 +21,60 @@
     # Sample Write-Warning output:
     WARNING: This is a sample message to both log and Write-(Verbose|Warning).
 #>
-[CmdletBinding()]
+#Requires -Version 5.1
+using namespace System.Management.Automation
+
+[CmdletBinding(SupportsShouldProcess)]
 param (
     [switch]$NoLog
 )
 #region Functions
 function writeLog {
-    param(
-        [Parameter(Mandatory)]
-        [string]$LogName,
-
-        [Parameter(Mandatory, ValueFromPipeline)]
-        [string]$Message,
-
-        [Parameter(Mandatory)]
-        [System.IO.FileInfo]$Folder,
-
+    param (
+        [Parameter(Mandatory)][string]$LogName,
+        [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
+        [Parameter(Mandatory, ValueFromPipeline)][string]$Message,
         [ErrorRecord]$ErrorRecord,
-
-        [Parameter(Mandatory)]
         [datetime]$LogDateTime = [datetime]::Now,
-
         [switch]$DisableLogging,
+        [switch]$SectionStart,
         [switch]$PassThru
     )
 
     if (-not $DisableLogging -and -not $WhatIfPreference.IsPresent) {
+        try {
+            if (-not (Test-Path -Path $Folder)) {
 
-        # Check for current log file and if necessary create it.
-        $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
-        if (-not (Test-Path $LogFile)) {
-            try {
+                [void](New-Item -Path $Folder -ItemType Directory -ErrorAction Stop)
+            }
+            $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
+            if (-not (Test-Path $LogFile)) {
+
                 [void](New-Item -Path $LogFile -ItemType:File -ErrorAction Stop)
             }
-            catch {
-                throw "Unable to create log file $($LogFile).  Unable to write to log."
-            }
         }
+        catch { throw $_ }
 
-        [string]$Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-
-        # Write message to log file:
-        $MessageText = "[ $($Date) ] $($Message)"
+        $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
+        $MessageText = "[$($Date)] $($Message)"
         switch ($SectionStart) {
 
             $true { $MessageText = "`r`n" + $MessageText }
         }
-        $MessageText | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        $MessageText | Out-File -FilePath $LogFile -Append
 
-        # If an error was supplied, write it to the log as well.
         if ($PSBoundParameters.ErrorRecord) {
 
             # Format the error as it would be displayed in the PS console.
-            $ErrorForLog = "$($ErrorRecord.Exception)`r`n" +
+            "[$($Date)][Error] $($ErrorRecord.Exception.Message)`r`n" +
             "$($ErrorRecord.InvocationInfo.PositionMessage)`r`n" +
-            "`t+ CategoryInfo: " +
-            "$($ErrorRecord.CategoryInfo.Category): " +
+            "`t+ CategoryInfo: $($ErrorRecord.CategoryInfo.Category): " +
             "($($ErrorRecord.CategoryInfo.TargetName):$($ErrorRecord.CategoryInfo.TargetType))" +
-            "[$($ErrorRecord.CategoryInfo.Activity)], " +
-            "$($ErrorRecord.CategoryInfo.Reason)`r`n" +
-            "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)"
-
-            "[ $($Date) ][Error] $($ErrorForLog)" | Out-File -FilePath $LogFile -Append
+            "[$($ErrorRecord.CategoryInfo.Activity)], $($ErrorRecord.CategoryInfo.Reason)`r`n" +
+            "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
+            Out-File -FilePath $LogFile -Append
         }
     }
-    # Output/passthru the message:
     if ($PassThru) { $Message }
 }
 #endregion Functions
@@ -101,28 +90,25 @@ $writeLogParams = @{
     ErrorAction = 'Stop'
 }
 
-if (-not $NoLog.IsPresent) {
-
-    # Check for and if necessary create logs folder:
-    if (-not (Test-Path -Path "$($writeLogParams['Folder'])")) {
-        
-        [void](New-Item -Path "$($writeLogParams['Folder'])" -ItemType Directory -ErrorAction Stop)
-    }
-
-    writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand) - Script begin."
-    writeLog @writeLogParams -Message "PSScriptRoot: $($PSScriptRoot)"
-    writeLog @writeLogParams -Message "Command: $($PSCmdlet.MyInvocation.Line)"
-}
-else {
-    # Disable logging.
-    $writeLogParams['DisableLogging'] = $true
-}
+if ($NoLog.IsPresent) { $writeLogParams['DisableLogging'] = $true }
 #endregion Initialization
 
 #region Main Script
+"$($PSCmdlet.MyInvocation.MyCommand) - Script begin." | writeLog @writeLogParams -PassThru | Write-Verbose
+"PSScriptRoot: $($PSScriptRoot)" | writeLog @writeLogParams -PassThru | Write-Verbose
+"Command: $($PSCmdlet.MyInvocation.Line)" | writeLog @writeLogParams -PassThru | Write-Verbose
 
-<# Code would go here #>
-
+try { 1/0 }
+catch {
+    writeLog @writeLogParams -Message "Encountered issue." -ErrorRecord $_ -PassThru |
+    Write-Warning
+}
+try { Get-ChildItem 23 -ErrorAction Stop }
+catch {
+    writeLog @writeLogParams -Message "Encountered issue." -ErrorRecord $_ -PassThru |
+    Write-Warning
+}
+finally {
+    writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand) - Script end." -PassThru | Write-Verbose
+}
 #endregion Main Script
-
-writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand) - Script end."
