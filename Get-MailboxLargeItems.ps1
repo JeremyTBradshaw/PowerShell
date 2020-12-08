@@ -237,68 +237,62 @@ param(
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_NoImpersonation')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_SmtpAddress')]
     [Parameter(Mandatory, ParameterSetName = 'BasicAuth_CSV')]
+    [ValidateScript(
+        {
+            if ($_.AbsoluteUri) { $true } else { throw "$($_) is not a valid URL." }
+        }
+    )]
     [uri]$EwsUrl
 )
 
 #region Functions
 function writeLog {
-    param(
-        [Parameter(Mandatory)]
-        [string]$LogName,
-
-        [Parameter(Mandatory)]
-        [string]$Message,
-
-        [Parameter(Mandatory)]
-        [System.IO.FileInfo]$Folder,
-
+    param (
+        [Parameter(Mandatory)][string]$LogName,
+        [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
+        [Parameter(Mandatory, ValueFromPipeline)][string]$Message,
         [ErrorRecord]$ErrorRecord,
-
-        [Parameter(Mandatory)]
         [datetime]$LogDateTime = [datetime]::Now,
-
-        [switch]$DisableLogging
+        [switch]$DisableLogging,
+        [switch]$SectionStart,
+        [switch]$PassThru
     )
 
     if (-not $DisableLogging -and -not $WhatIfPreference.IsPresent) {
+        try {
+            if (-not (Test-Path -Path $Folder)) {
 
-        # Check for current log file and if necessary create it.
-        $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
-        if (-not (Test-Path $LogFile)) {
-            try {
+                [void](New-Item -Path $Folder -ItemType Directory -ErrorAction Stop)
+            }
+            $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
+            if (-not (Test-Path $LogFile)) {
+
                 [void](New-Item -Path $LogFile -ItemType:File -ErrorAction Stop)
             }
-            catch {
-                throw "Unable to create log file $($LogFile).  Unable to write to log."
-            }
         }
+        catch { throw $_ }
 
-        [string]$Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-
-        # Write message to log file:
+        $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
         $MessageText = "[ $($Date) ] $($Message)"
         switch ($SectionStart) {
 
             $true { $MessageText = "`r`n" + $MessageText }
         }
-        $MessageText | Out-File -FilePath $LogFile -Append -Encoding UTF8
+        $MessageText | Out-File -FilePath $LogFile -Append
 
-        # If an error was supplied, write it to the log as well.
         if ($PSBoundParameters.ErrorRecord) {
 
             # Format the error as it would be displayed in the PS console.
-            $ErrorForLog = "$($ErrorRecord.Exception)`r`n" +
+            "[ $($Date) ][Error] $($ErrorRecord.Exception.Message)`r`n" +
             "$($ErrorRecord.InvocationInfo.PositionMessage)`r`n" +
-            "`t+ CategoryInfo: " +
-            "$($ErrorRecord.CategoryInfo.Category): " +
+            "`t+ CategoryInfo: $($ErrorRecord.CategoryInfo.Category): " +
             "($($ErrorRecord.CategoryInfo.TargetName):$($ErrorRecord.CategoryInfo.TargetType))" +
-            "[$($ErrorRecord.CategoryInfo.Activity)], " +
-            "$($ErrorRecord.CategoryInfo.Reason)`r`n" +
-            "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)"
-
-            "[ $($Date) ][Error] $($ErrorForLog)" | Out-File -FilePath $LogFile -Append
+            "[$($ErrorRecord.CategoryInfo.Activity)], $($ErrorRecord.CategoryInfo.Reason)`r`n" +
+            "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
+            Out-File -FilePath $LogFile -Append
         }
     }
+    if ($PassThru) { $Message }
 }
 
 function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox) {
@@ -331,7 +325,7 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
         $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
     }
 
-    $ExSvc.UserAgent = 'Get-MailboxLargeItems.ps1'
+    $ExSvc.UserAgent = $PSCmdlet.MyInvocation.MyCommand
 
     # Increase the timeout by 50% (default is 100,000) to cater to large mailboxes:
     $ExSvc.Timeout = 150000
@@ -501,7 +495,7 @@ function Get-ConnectingUserSmtpAddress ($ExSvc) {
         [AlternateId]::New(
             'EwsId',
             ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId, 
-            'ConnectingUserSmtpFinder@EwsApi.ps1'
+            "ConnectingUser@$($PSCmdlet.MyInvocation.MyCommand)"
         ),
         'EwsId'
 
@@ -532,7 +526,7 @@ try {
             [void](New-Item -Path "$($writeLogParams['Folder'])" -ItemType Directory -ErrorAction Stop)
         }
 
-        writeLog @writeLogParams -Message 'Get-MailoxLargeItems.ps1 - Script begin.'
+        writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand) - Script begin."
         writeLog @writeLogParams -Message "PSScriptRoot: $($PSScriptRoot)"
         writeLog @writeLogParams -Message "Command: $($PSCmdlet.MyInvocation.Line)"
 
@@ -573,13 +567,18 @@ try {
         if ($PSCmdlet.ParameterSetName -like '*_SmtpAddress') {
 
             foreach ($sA in $MailboxSmtpAddress) {
-    
+
                 $Mailboxes += [PSCustomObject]@{ SmtpAddress = $sA }
             }
         }
+        elseif ($PSCmdlet.ParameterSetName -like 'Basic*') {
+
+            # Setting as placeholder.  Will determine SmtpAddress later:
+            $Mailboxes += [PSCustomObject]@{ SmtpAddress = $Credential.UserName }
+        }
         else {
-            # Set a placeholder SmtpAddress for the user of the -AccessToken / -Credential:
-            $Mailboxes += [PSCustomObject]@{ SmtpAddress = 'ConnectingUserSmtpFinder@EwsApi.ps1' }
+            # Set sa placeholder SmtpAddress for the user of the -AccessToken:
+            $Mailboxes += [PSCustomObject]@{ SmtpAddress = "ConnectingUser@$($PSCmdlet.MyInvocation.MyCommand)" }
         }
     }
 
@@ -704,21 +703,17 @@ try {
             'Otherwise, unless Halted, or if the error is script-ending, the script will continue.'
 
             if ($_ -match '(90210)') {
-                $currentMsg = "Mailbox $($Mailbox) | Newly created 'AllItems' folder is still not availalbe.  Try again later."
-
-                Write-Warning -Message $currentMsg
-                writeLog @writeLogParams -Message $currentMsg
+            
+                "Mailbox $($Mailbox) | Newly created 'AllItems' folder is still not availalbe.  Try again later." |
+                writeLog @writeLogParams -PassThru | Write-Warning
             }
             elseif (
                 ($_.ToString().Contains('The SMTP address has no mailbox associated with it.')) -or
                 ($_.Exception.InnerException -match 'No mailbox with such guid.') -or
                 ((-not $Archive) -and $_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
             ) {
-                $currentMsg = $null
-                $currentMsg = "Mailbox: $($Mailbox) | A mailbox was not found for this user."
-
-                Write-Warning -Message $currentMsg
-                writeLog @writeLogParams -Message $currentMsg
+                "Mailbox: $($Mailbox) | A mailbox was not found for this user." |
+                writeLog @writeLogParams -PassThru | Write-Warning
             }
             elseif (
                 ($PSBoundParameters.ContainsKey('Archive')) -and
@@ -727,38 +722,26 @@ try {
                     ($_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
                 )
             ) {
-                $currentMsg = $null
-                $currentMsg = "Mailbox: $($Mailbox) | There is no archive mailbox for this user."
-
-                Write-Warning -Message $currentMsg
-                writeLog @writeLogParams -Message $currentMsg
+                "Mailbox: $($Mailbox) | There is no archive mailbox for this user." |
+                writeLog @writeLogParams -PassThru | Write-Warning
             }
             elseif (
                 ($PSBoundParameters.ContainsKey('Archive')) -and
                 ($_.Exception.InnerException -match "The user's remote archive is disabled.")
             ) {
-                $currentMsg = $null
-                $currentMsg = "Mailbox: $($Mailbox) | There is no local archive mailbox for this user, although there may be one in EXO."
-
-                Write-Warning -Message $currentMsg
-                writeLog @writeLogParams -Message $currentMsg
+                "Mailbox: $($Mailbox) | There is no local archive mailbox for this user, although there may be one in EXO." |
+                writeLog @writeLogParams -PassThru | Write-Warning
             }
             elseif ($_.Exception.InnerException -match '(ExchangeImpersonation SOAP header must be present for this type of OAuth token\.)') {
 
-                $currentMsg = $null
-                $currentMsg = 'The supplied access token appears to be for app-only authentication, and therefore impersonation must be used.  ' +
+                'The supplied access token appears to be for app-only authentication, and therefore impersonation must be used.  ' +
                 'For this kind of access token, supply either -MailboxListCSV or -MailboxSmtpAddress.  ' +
-                'Otherwise, provide a delegated authorization access token.'
-
-                Write-Warning -Message $currentMsg
+                'Otherwise, provide a delegated authorization access token.' | Write-Warning
                 break
             }
             else {
-                $currentMsg = $null
-                $currentMsg = "Mailbox $($Mailbox) | Script-ending error: $($_.Exception.Message)"
-
-                Write-Warning -Message $currentMsg
-                writeLog @writeLogParams -Message $currentMsg -ErrorRecord $_
+                "Mailbox $($Mailbox) | Script-ending error: $($_.Exception.Message)" |
+                writeLog @writeLogParams -ErrorRecord $_ -PassThru | Write-Warning
                 Write-Error $_
                 Write-Debug -Message $debugHelpMessage
                 break
@@ -769,14 +752,11 @@ try {
     #endregion Mailbox Loop
 }
 catch {
-    $currentMsg = $null
-    $currentMsg = "Script-ending failure: $($_.Exception.Message)"
-
-    Write-Warning -Message $currentMsg
-    writeLog @writeLogParams -Message $currentMsg
+    "Script-ending failure: $($_.Exception.Message)" | 
+    writeLog @writeLogParams -PassThru | Write-Warning
     Write-Debug -Message $debugHelpMessage
     throw $_
 }
 
-finally { writeLog @writeLogParams -Message 'Get-MailoxLargeItems.ps1 - Script end.' }
+finally { writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand) - Script end." }
 #endRegion Main Script

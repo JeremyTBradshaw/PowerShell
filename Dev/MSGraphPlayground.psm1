@@ -298,3 +298,59 @@ function New-AppOnlyAccessToken {
     # Output the token request response:
     $trResponse
 }
+
+function Test-CertificateProvider ([X509Certificate2]$Certificate) {
+
+    if ($PSVersionTable.PSEdition -eq 'Desktop') {
+
+        $certProvider = $Certificate.PrivateKey.CspKeyContainerInfo.ProviderName
+    }
+    else { $certProvider = $Certificate.PrivateKey.Key.Provider }
+
+    if ($certProvider -eq 'Microsoft Enhanced RSA and AES Cryptographic Provider') {
+
+        $true
+    }
+    else { $false }
+}
+
+function ConvertTo-Base64Url ([string]$String) {
+
+    $String -replace '\+', '-' -replace '/', '_' -replace '='
+}
+
+function ConvertFrom-Base64Url ([string]$String) {
+
+    while ($String.Length % 4) { $String += '=' }
+    $String -replace '-', '\+' -replace '_', '/'
+}
+
+function ConvertFrom-JWT {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [ValidateScript(
+            {
+                if ($_ -match '^eyJ0[-\w]+\.[-\w]+\.[-\w]+$') { $true } else { throw 'Invalid JWT.' }
+            }
+        )]
+        [Object]$JWT
+    )
+
+    $Headers, $Claims = ($JWT -split '\.')[0,1]
+    
+    [PSCustomObject]@{
+
+        Headers = ([System.Text.Encoding]::ASCII.GetString(
+
+            [Convert]::FromBase64String((ConvertFrom-Base64Url $Headers))
+        ) |
+        ConvertFrom-Json)
+
+        Claims = ([System.Text.Encoding]::ASCII.GetString(
+        
+            [Convert]::FromBase64String((ConvertFrom-Base64Url $Claims))
+        ) |
+        ConvertFrom-Json)
+    }
+}

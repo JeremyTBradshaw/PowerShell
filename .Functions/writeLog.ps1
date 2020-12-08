@@ -25,7 +25,7 @@ function writeLog {
         catch { throw $_ }
 
         $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-        $MessageText = "[$($Date)] $($Message)"
+        $MessageText = "[ $($Date) ] $($Message)"
         switch ($SectionStart) {
 
             $true { $MessageText = "`r`n" + $MessageText }
@@ -35,7 +35,7 @@ function writeLog {
         if ($PSBoundParameters.ErrorRecord) {
 
             # Format the error as it would be displayed in the PS console.
-            "[$($Date)][Error] $($ErrorRecord.Exception.Message)`r`n" +
+            "[ $($Date) ][Error] $($ErrorRecord.Exception.Message)`r`n" +
             "$($ErrorRecord.InvocationInfo.PositionMessage)`r`n" +
             "`t+ CategoryInfo: $($ErrorRecord.CategoryInfo.Category): " +
             "($($ErrorRecord.CategoryInfo.TargetName):$($ErrorRecord.CategoryInfo.TargetType))" +
