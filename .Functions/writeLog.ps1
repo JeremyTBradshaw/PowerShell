@@ -1,4 +1,5 @@
 function writeLog {
+    [CmdletBinding()]
     param (
         [Parameter(Mandatory)][string]$LogName,
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
@@ -21,28 +22,28 @@ function writeLog {
 
                 [void](New-Item -Path $LogFile -ItemType:File -ErrorAction Stop)
             }
+
+            $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
+            $MessageText = "[ $($Date) ] $($Message)"
+            switch ($SectionStart) {
+
+                $true { $MessageText = "`r`n" + $MessageText }
+            }
+            $MessageText | Out-File -FilePath $LogFile -Append
+
+            if ($PSBoundParameters.ErrorRecord) {
+
+                # Format the error as it would be displayed in the PS console.
+                "[ $($Date) ][Error] $($ErrorRecord.Exception.Message)`r`n" +
+                "$($ErrorRecord.InvocationInfo.PositionMessage)`r`n" +
+                "`t+ CategoryInfo: $($ErrorRecord.CategoryInfo.Category): " +
+                "($($ErrorRecord.CategoryInfo.TargetName):$($ErrorRecord.CategoryInfo.TargetType))" +
+                "[$($ErrorRecord.CategoryInfo.Activity)], $($ErrorRecord.CategoryInfo.Reason)`r`n" +
+                "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
+                Out-File -FilePath $LogFile -Append -ErrorAction Stop
+            }
         }
         catch { throw $_ }
-
-        $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-        $MessageText = "[ $($Date) ] $($Message)"
-        switch ($SectionStart) {
-
-            $true { $MessageText = "`r`n" + $MessageText }
-        }
-        $MessageText | Out-File -FilePath $LogFile -Append
-
-        if ($PSBoundParameters.ErrorRecord) {
-
-            # Format the error as it would be displayed in the PS console.
-            "[ $($Date) ][Error] $($ErrorRecord.Exception.Message)`r`n" +
-            "$($ErrorRecord.InvocationInfo.PositionMessage)`r`n" +
-            "`t+ CategoryInfo: $($ErrorRecord.CategoryInfo.Category): " +
-            "($($ErrorRecord.CategoryInfo.TargetName):$($ErrorRecord.CategoryInfo.TargetType))" +
-            "[$($ErrorRecord.CategoryInfo.Activity)], $($ErrorRecord.CategoryInfo.Reason)`r`n" +
-            "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
-            Out-File -FilePath $LogFile -Append
-        }
     }
     if ($PassThru) { $Message }
 }
