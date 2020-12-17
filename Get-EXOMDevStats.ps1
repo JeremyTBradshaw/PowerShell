@@ -3,9 +3,10 @@
     Get mobile devices and their statistics for all on-premises mailboxes, for use with mailbox migration planning.
 
     .Example
-    .\Get-MDevStats.ps1 | Export-Csv "MDevStats_$(Get-Date -Format 'yyyy-MM-dd').csv" -NTI -Encoding UTF8
+    .\Get-EXOMDevStats.ps1 | Export-Csv "EXOMDevStats_$(Get-Date -Format 'yyyy-MM-dd').csv" -NTI -Encoding UTF8
 #>
 #Requires -Version 5.1
+#Requires -Modules ExchangeOnlineManagement
 [CmdletBinding()]
 param()
 
@@ -13,32 +14,30 @@ param()
 $PSSessionsByComputerName = Get-PSSession | Group-Object -Property ComputerName
 if (-not (Get-Command Get-MobileDeviceStatistics)) {
 
-    "Command 'Get-MobileDeviceStatistics' is not available.  Make sure to run this script against Exchange 2016 or newer." |
-    Write-Warning
+    "Command 'Get-EXOMobileDeviceStatistics' is not available.  Make sure to run this script against Exchange Online using the EXOv2 module " +
+    "(Install-Module ExchangeOnlineManagement -Scope CurrentUser; Connect-ExchangeOnline).  Exiting script." | Write-Warning
     break
 }
-elseif ($PSSessionsByComputerName.Name -eq 'outlook.office365.com') {
+elseif (-not ($PSSessionsByComputerName.Name -eq 'outlook.office365.com')) {
 
-    'EXO PSSession detected.  This script is intended for use with on-premises Exchange.  Exiting script.' |
-    Write-Warning
+    Write-Warning -Message 'No EXO PSSession detected.  Connect first using Connect-ExchangeOnline.  Exiting script.'
     break
 }
 
 $Start = [datetime]::Now
 $ProgressProps = @{
 
-    Activity        = "Get-MDevStats.ps1 - Start time: $($Start)"
+    Activity        = "Get-EXOMDevStats.ps1 - Start time: $($Start)"
     Status          = 'Working'
     PercentComplete = -1
 }
 
 try {
-    Write-Progress @ProgressProps -CurrentOperation 'Get-Mailbox (on-premises mailboxes)'
-    $LocalMailboxes = Get-Mailbox -ResultSize Unlimited -ErrorAction Stop |
-    Where-Object { $_.RecipientTypeDetails -ne 'DiscoveryMailbox' -and $_.RecipientTypeDetails -ne 'ArbitrationMailbox' }
+    Write-Progress @ProgressProps -CurrentOperation 'Get-EXOMailbox (ExchangeOnlineManagement module)'
+    $EXOMailboxes = Get-EXOMailbox -ResultSize Unlimited -ErrorAction Stop
 }
 catch {
-    Write-Warning -Message "Failed on initial Get-Mailbox step.  Exiting script.  Error`n`n($_.Exception)"
+    Write-Warning -Message "Failed on initial Get-EXOMailbox step.  Exiting script.  Error`n`n($_.Exception)"
     break
 }
 #endregion Initialization
@@ -47,20 +46,20 @@ catch {
 $ProgressCounter = 0
 $Stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-foreach ($mbx in $LocalMailboxes) {
+foreach ($mbx in $EXOMailboxes) {
 
     $ProgressCounter++
     if ($Stopwatch.Elapsed.Milliseconds -ge 300) {
 
-        $ProgressProps['PercentComplete'] = (($ProgressCounter / $LocalMailboxes.Count) * 100)
-        $ProgressProps['CurrentOperation'] = "Preparing user/device custom objects for $($mbx.DisplayName) ($($mbx.PrimarySmtpAddress))"
+        $ProgressProps['PercentComplete'] = (($ProgressCounter / $EXOMailboxes.Count) * 100)
+        $ProgressProps['CurrentOperation'] = "Preparing user/device combined objects for $($mbx.DisplayName) ($($mbx.PrimarySmtpAddress))"
         Write-Progress @ProgressProps
 
         $Stopwatch.Restart()
     }
 
     $MDevs = @()
-    $MDevs += Get-MobileDeviceStatistics -Mailbox $mbx.Guid.Guid -ErrorAction SilentlyContinue |
+    $MDevs += Get-EXOMobileDeviceStatistics -Mailbox $mbx.Guid.Guid -ErrorAction SilentlyContinue |
     Select-Object -Property @{
         Name       = 'UserDisplayName'
         Expression = { $mbx.DisplayName }
@@ -96,4 +95,4 @@ foreach ($mbx in $LocalMailboxes) {
         $MDevs
     }
 }
-#endregion Main loop
+#region Main loop
