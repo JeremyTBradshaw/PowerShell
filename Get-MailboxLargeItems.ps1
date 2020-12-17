@@ -13,7 +13,7 @@
     ApplicationImpersonation RBAC role, at least for the scope of the mailboxes being searched.  Similarly, If
     -MailboxListCSV or -MailboxSmtpAddress are used with the -AccessToken parameter, the application used for
     the -AccessToken parameter needs to be setup in Azure AD as an App Registration, and, if the access token is an
-    App-Only token, the application must be configured for app-only authentication (see .Links section), or if the 
+    App-Only token, the application must be configured for app-only authentication (see .Links section), or if the
     token is a delegated token, the user of the token must have the ApplicationImpersonation RBAC role assigned, at
     least for the scope of the mailboxes being searched.
 
@@ -425,7 +425,7 @@ function Get-LargeItems ($ExSvc, $Mailbox, $FolderId, $LargeItemSizeMB, [switch]
 
         if ($FindItemsResult.MoreAvailable) {
 
-            $Offset = $FindItemsResult.NextPageOffset 
+            $Offset = $FindItemsResult.NextPageOffset
         }
         else { $MoreAvailable = $false }
     }
@@ -495,12 +495,12 @@ function Get-ConnectingUserSmtpAddress ($ExSvc) {
     $ExSvc.ConvertId(
         [AlternateId]::New(
             'EwsId',
-            ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId, 
+            ([Folder]::Bind($ExSvc, 'Root')).Id.UniqueId,
             "ConnectingUser@$($PSCmdlet.MyInvocation.MyCommand)"
         ),
         'EwsId'
 
-    ).Mailbox 
+    ).Mailbox
 }
 #endregion Functions
 
@@ -583,12 +583,17 @@ try {
         }
     }
 
-    $EwsManagedApiDll = Get-ChildItem -Path $EwsManagedApiDllPath -ErrorAction Stop
+    $EwsManagedApiFail = "EWS Managed API 2.2 is required, specifically product/file version 15.00.0913.015.`r`n" +
+    "Download: https://www.microsoft.com/en-us/download/details.aspx?id=42951"
+
+    if (-not (Test-Path -Path $EwsManagedApiDllPath)) { throw $EwsManagedApiFail }
+    else {
+        $EwsManagedApiDll = Get-ChildItem -Path $EwsManagedApiDllPath -ErrorAction Stop
+    }
 
     if ($EwsManagedApiDll.VersionInfo.FileVersion -ne '15.00.0913.015') {
 
-        throw "EWS Managed API 2.2 is required, specifically product/file version 15.00.0913.015.`r`n" +
-        "Download: https://www.microsoft.com/en-us/download/details.aspx?id=42951"
+        throw $EwsManagedApiFail
     }
     Import-Module $EwsManagedApiDll -ErrorAction Stop
 
@@ -704,7 +709,7 @@ try {
             'Otherwise, unless Halted, or if the error is script-ending, the script will continue.'
 
             if ($_ -match '(90210)') {
-            
+
                 "Mailbox $($Mailbox) | Newly created 'AllItems' folder is still not availalbe.  Try again later." |
                 writeLog @writeLogParams -PassThru | Write-Warning
             }
@@ -748,14 +753,12 @@ try {
                 break
             }
             Write-Debug -Message $debugHelpMessage
-        }	
+        }
     }
     #endregion Mailbox Loop
 }
 catch {
-    "Script-ending failure: $($_.Exception.Message)" | 
-    writeLog @writeLogParams -PassThru | Write-Warning
-    Write-Debug -Message $debugHelpMessage
+    "Script-ending failure: $($_.Exception.Message)" | writeLog @writeLogParams
     throw $_
 }
 
