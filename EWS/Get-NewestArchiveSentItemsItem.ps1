@@ -409,9 +409,11 @@ try {
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Found newest item."
 
                     if ($PSCmdlet.ParameterSetName -like '*_CSV') {
+                        if ($WhatIfPreference.IsPresent) {
 
-                        writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing item to output CSV."
-                        $Newest | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
+                            writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing item to output CSV."
+                            $Newest | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
+                        }
                     }
                     else { $NewestItem }
                 }
@@ -439,19 +441,13 @@ try {
                 writeLog @writeLogParams -PassThru | Write-Warning
             }
             elseif (
-                ($PSBoundParameters.ContainsKey('Archive')) -and
-                (
-                    ($_.ToString().Contains('The specified folder could not be found in the store.')) -or
-                    ($_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
-                )
+                ($_.ToString().Contains('The specified folder could not be found in the store.')) -or
+                ($_.Exception.InnerException -match '(The element at position 0 is invalid.*\nParameter name: parentFolderIds)')
             ) {
                 "Mailbox: $($Mailbox) | There is no archive mailbox for this user." |
                 writeLog @writeLogParams -PassThru | Write-Warning
             }
-            elseif (
-                ($PSBoundParameters.ContainsKey('Archive')) -and
-                ($_.Exception.InnerException -match "The user's remote archive is disabled.")
-            ) {
+            elseif ($_.Exception.InnerException -match "The user's remote archive is disabled.") {
                 "Mailbox: $($Mailbox) | There is no local archive mailbox for this user, although there may be one in EXO." |
                 writeLog @writeLogParams -PassThru | Write-Warning
             }
@@ -475,7 +471,7 @@ try {
     #endregion Mailbox Loop
 }
 catch {
-    "Script-ending failure: $($_.Exception.Message)" | writeLog @writeLogParams
+    "Script-ending failure: $($_.Exception.Message)" | writeLog @writeLogParams -PassThru | Write-Warning
     throw $_
 }
 
