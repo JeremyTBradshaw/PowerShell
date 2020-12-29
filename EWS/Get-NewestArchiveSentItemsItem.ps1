@@ -49,6 +49,57 @@
     Specifies the URL for the Exchange Web Services endpoint.  Required when using -Credential paramter (i.e.
     Basic authentication) and regardless of whether connecting to Exchange on-premises or Exchange Online.  If using
     -AccessToken (i.e. OAuth), Exchange Online's EWS URL is automatically used instead.
+
+    .Example
+    .\Get-NewestArchiveSentItemsItem.ps1 -EwsUrl https://mail.contoso.com/ews/exchange.asmx -Credential $Creds -MailboxSmtpAddress User007@contoso.com
+
+    # Search a single archive mailbox for the newest item in \Sent Items.
+
+    .Example
+    .\Get-NewestArchiveSentItemsItem.ps1 -EwsUrl https://mail.contoso.com/ews/exchange.asmx -Credential $Creds -MailboxListCsv .\Users.csv
+
+    # Create CSV report of archive mailboxes' newest item in \Sent Items.
+
+    .Inputs
+    # Sample CSV file for use with -MailboxListCSV parameter:
+        Users.csv:
+            "SmtpAddress"
+            "User001@contoso.com"
+            "User002@contoso.com"
+            "User003@contoso.com"
+
+    .Outputs
+    # Output object (will be exported to CSV when using -MailboxListCSV, only to the console when using -MailboxSmtpAddress):
+        Mailbox      : User007@contoso.com
+        ItemClass    : IPM.Note
+        Subject      : Screenshot_20200918-123225_One UI Home.jpg
+        SizeMB       : 1.29
+        DateTimeSent : 11/30/2020 2:39:44 PM
+
+    # Sample log file:
+        [ 2020-12-29 10:21:48 AM ] Get-NewestArchiveSentItemsItem.ps1 - Script begin.
+        [ 2020-12-29 10:21:48 AM ] PSScriptRoot: C:\Users\ExAdmin\Desktop\Scripts
+        [ 2020-12-29 10:21:48 AM ] Command: .\Scripts\Get-NewestArchiveSentItemsItem.ps1 -EwsUrl https://mail.contoso.com/ews/exchange.asmx -MailboxListCSV .\mailboxes.csv -Credential $MyCreds
+        [ 2020-12-29 10:21:48 AM ] Authentication: Basic (contoso\ExAdmin)
+        [ 2020-12-29 10:21:48 AM ] EWS URL: https://mail.contoso.com/ews/exchange.asmx
+        [ 2020-12-29 10:21:48 AM ] Successfully imported mailbox list CSV '.\mailboxes.csv'.
+        [ 2020-12-29 10:21:48 AM ] Will process 500 mailboxes.
+        [ 2020-12-29 10:21:48 AM ] Created (empty shell) output CSV file (to ensure it's available for any items that are found).
+        [ 2020-12-29 10:21:48 AM ] Output CSV: C:\Users\ExAdmin\Desktop\Scripts\Get-NewestArchiveSentItemsItem_Outputs\MailboxLargeItems_2020-12-29_10-21-48.csv
+        [ 2020-12-29 10:21:48 AM ] Successfully verified version and imported EWS Managed API 2.2 DLL (with Import-Module).
+        [ 2020-12-29 10:21:48 AM ] Mailbox: 1 of 500
+        [ 2020-12-29 10:21:49 AM ] Mailbox: Mailbox1@contoso.com | There is no archive mailbox for this user.
+        [ 2020-12-29 10:21:49 AM ] Mailbox: 2 of 500
+        [ 2020-12-29 10:21:49 AM ] Mailbox: Mailbox2@contoso.com | There is no archive mailbox for this user.
+        [ 2020-12-29 10:21:49 AM ] Mailbox: 3 of 500
+        [ 2020-12-29 10:21:50 AM ] Mailbox: Mailbox3@contoso.com | Found 'Sent Items' in root of archive mailbox.  Searching it...
+        [ 2020-12-29 10:21:50 AM ] Mailbox: Mailbox3@contoso.com | Found newest item.
+        [ 2020-12-29 10:21:50 AM ] Mailbox: Mailbox3@contoso.com | Writing item to output CSV.
+        ...
+        ...
+        [ 2020-12-29 10:27:28 AM ] Mailbox: 500 of 500
+        [ 2020-12-29 10:27:28 AM ] Mailbox: Mailbox500@contoso.com | There is no archive mailbox for this user.
+        [ 2020-12-29 10:27:28 AM ] Get-NewestArchiveSentItemsItem.ps1 - Script end.
 #>
 #Requires -Version 5.1 -PSEdition Desktop
 using namespace System.Management.Automation
@@ -297,16 +348,6 @@ try {
             writeLog @writeLogParams -Message "EWS URL: $($EwsUrl)"
         }
 
-        writeLog @writeLogParams -Message "LargeItemsSizeMB set to $($LargeItemSizeMB) MB."
-
-        if ($PSBoundParameters.ContainsKey('Archive')) {
-
-            writeLog @writeLogParams -Message 'Searching Archive mailboxes (-Archive switch parameter was used).'
-        }
-        else {
-            writeLog @writeLogParams -Message 'Searching Primary mailboxes (-Archive switch parameter was not used).'
-        }
-
         $Mailboxes += Import-Csv $MailboxListCSV -ErrorAction Stop
 
         writeLog @writeLogParams -Message "Successfully imported mailbox list CSV '$($MailboxListCSV)'."
@@ -315,7 +356,7 @@ try {
         $OutputCSV = "$($writeLogParams['Folder'])\MailboxLargeItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
         [void](New-Item -Path $OutputCSV -ItemType File -ErrorAction Stop)
 
-        writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv of any larged items that are found)."
+        writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's available for any items that are found)."
         writeLog @writeLogParams "Output CSV: $($OutputCSV)"
     }
     else {
@@ -409,10 +450,10 @@ try {
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Found newest item."
 
                     if ($PSCmdlet.ParameterSetName -like '*_CSV') {
-                        if ($WhatIfPreference.IsPresent) {
+                        if (-not $WhatIfPreference.IsPresent) {
 
                             writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing item to output CSV."
-                            $Newest | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
+                            $NewestItem | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
                         }
                     }
                     else { $NewestItem }
