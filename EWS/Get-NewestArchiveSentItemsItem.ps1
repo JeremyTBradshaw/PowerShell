@@ -10,7 +10,7 @@
     cares, I figure I'll close this gap with this script instead of bothering the Exchange team to repair the Cmdlet.
 
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
-    output file (even if there are no large items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
+    output file (even if there are no items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
     parameters, impersonation is implied and the account used for -Credential parameter needs to be assigned the
     ApplicationImpersonation RBAC role, at least for the scope of the mailboxes being searched.  Similarly, If
     -MailboxListCSV or -MailboxSmtpAddress are used with the -AccessToken parameter, the application used for
