@@ -353,7 +353,7 @@ try {
         writeLog @writeLogParams -Message "Successfully imported mailbox list CSV '$($MailboxListCSV)'."
         writeLog @writeLogParams -Message "Will process $($Mailboxes.Count) mailboxes."
 
-        $OutputCSV = "$($writeLogParams['Folder'])\MailboxLargeItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
+        $OutputCSV = "$($writeLogParams['Folder'])\NewestArchiveSentItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
         [void](New-Item -Path $OutputCSV -ItemType File -ErrorAction Stop)
 
         writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's available for any items that are found)."
