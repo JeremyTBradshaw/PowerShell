@@ -462,6 +462,9 @@ try {
                     writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | No items found."
                 }
             }
+            else {
+                writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | No items found."
+            }
         }
         catch {
             # Depends on PSVersion 5.1, or for PSVersions 6+ - $DebugPreference set to 'Inquire':
