@@ -1,6 +1,6 @@
 <#
     .Synopsis
-    Get mobile devices and their statistics for all on-premises mailboxes, for use with mailbox migration planning.
+    Get mobile devices and some of their pertinent details/statistics for all mailboxes in the currently connected EXO tenant.
 
     .Example
     .\Get-EXOMDevStats.ps1 | Export-Csv "EXOMDevStats_$(Get-Date -Format 'yyyy-MM-dd').csv" -NTI -Encoding UTF8
@@ -89,10 +89,6 @@ foreach ($mbx in $EXOMailboxes) {
         Expression = {$mbx.UserPrincipalName}
     }
 
-    if ($MDevs.Count -ge 1) {
-
-        # Output the combined user/device objects:
-        $MDevs
-    }
+    $MDevs
 }
 #region Main loop

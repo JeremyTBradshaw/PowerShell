@@ -90,10 +90,6 @@ foreach ($mbx in $LocalMailboxes) {
         Expression = {$mbx.UserPrincipalName}
     }
 
-    if ($MDevs.Count -ge 1) {
-
-        # Output the combined user/device objects:
-        $MDevs
-    }
+    $MDevs
 }
 #endregion Main loop

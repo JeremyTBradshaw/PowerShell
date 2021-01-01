@@ -10,7 +10,7 @@
     cares, I figure I'll close this gap with this script instead of bothering the Exchange team to repair the Cmdlet.
 
     When using -MailboxListCSV, a logs folder will be created in the same directory as the script, and so will a CSV
-    output file (even if there are no large items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
+    output file (even if there are no sent items found).  When using either -MailboxListCSV or -MailboxSmtpAddress
     parameters, impersonation is implied and the account used for -Credential parameter needs to be assigned the
     ApplicationImpersonation RBAC role, at least for the scope of the mailboxes being searched.  Similarly, If
     -MailboxListCSV or -MailboxSmtpAddress are used with the -AccessToken parameter, the application used for
@@ -297,8 +297,6 @@ try {
             writeLog @writeLogParams -Message "EWS URL: $($EwsUrl)"
         }
 
-        writeLog @writeLogParams -Message "LargeItemsSizeMB set to $($LargeItemSizeMB) MB."
-
         if ($PSBoundParameters.ContainsKey('Archive')) {
 
             writeLog @writeLogParams -Message 'Searching Archive mailboxes (-Archive switch parameter was used).'
@@ -312,10 +310,10 @@ try {
         writeLog @writeLogParams -Message "Successfully imported mailbox list CSV '$($MailboxListCSV)'."
         writeLog @writeLogParams -Message "Will process $($Mailboxes.Count) mailboxes."
 
-        $OutputCSV = "$($writeLogParams['Folder'])\MailboxLargeItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
+        $OutputCSV = "$($writeLogParams['Folder'])\NewestArchiveSentItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
         [void](New-Item -Path $OutputCSV -ItemType File -ErrorAction Stop)
 
-        writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv of any larged items that are found)."
+        writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv if/when items are found)."
         writeLog @writeLogParams "Output CSV: $($OutputCSV)"
     }
     else {
