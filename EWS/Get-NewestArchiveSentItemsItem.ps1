@@ -352,17 +352,6 @@ try {
             writeLog @writeLogParams -Message "EWS URL: $($EwsUrl)"
         }
 
-<<<<<<< HEAD
-        if ($PSBoundParameters.ContainsKey('Archive')) {
-
-            writeLog @writeLogParams -Message 'Searching Archive mailboxes (-Archive switch parameter was used).'
-        }
-        else {
-            writeLog @writeLogParams -Message 'Searching Primary mailboxes (-Archive switch parameter was not used).'
-        }
-
-=======
->>>>>>> 59a90d262ffa33e5a12e9db99417311c2c66887e
         $Mailboxes += Import-Csv $MailboxListCSV -ErrorAction Stop
 
         writeLog @writeLogParams -Message "Successfully imported mailbox list CSV '$($MailboxListCSV)'."
@@ -371,11 +360,7 @@ try {
         $OutputCSV = "$($writeLogParams['Folder'])\NewestArchiveSentItems_$($dtNow.ToString('yyyy-MM-dd_HH-mm-ss')).csv"
         [void](New-Item -Path $OutputCSV -ItemType File -ErrorAction Stop)
 
-<<<<<<< HEAD
-        writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's avaiable for Export-Csv if/when items are found)."
-=======
         writeLog @writeLogParams "Created (empty shell) output CSV file (to ensure it's available for any items that are found)."
->>>>>>> 59a90d262ffa33e5a12e9db99417311c2c66887e
         writeLog @writeLogParams "Output CSV: $($OutputCSV)"
     }
     else {
