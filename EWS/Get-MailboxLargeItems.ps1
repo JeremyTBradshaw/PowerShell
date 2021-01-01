@@ -694,7 +694,7 @@ try {
                 if ($LargeItems.Count -ge 1) {
 
                     if ($PSCmdlet.ParameterSetName -like '*_CSV') {
-                        if ($WhatIfPreference.IsPresent) {
+                        if (-not $WhatIfPreference.IsPresent) {
 
                             writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing large items to output CSV."
                             $LargeItems | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop

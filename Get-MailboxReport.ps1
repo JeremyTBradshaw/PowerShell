@@ -26,7 +26,7 @@
 
 [CmdletBinding()]
 param(
-    [ValidatePattern('^(\w+@)(\w+\.)+\w+$')]
+    [ValidatePattern('^\w+([-+.'']\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*$')]
     [string]$AadUPN
 )
 
@@ -94,19 +94,40 @@ begin {
 
         # Build this manually using Get-AzureADSubscribedSku and the Azure AD Portal (Licenses > All Products).
 
-        'f30db892-07e9-47e9-837c-80727f46fd3d' = 'Microsoft Power Automate Free'
-        'c5928f49-12ba-48f7-ada3-0d743a3601d5' = 'Visio Plan 2'
-        '53818b1b-4a27-454b-8896-0dba576410e6' = 'Project Plan 3'
-        '6470687e-a428-4b7a-bef2-8a291ad947c9' = 'Microsoft Store for Business'
-        'b05e124f-c7cc-45a0-a6aa-8cf78c946968' = 'Enterprise Mobility + Security E5'
-        'a403ebcc-fae0-4ca2-8c8c-7a907fd6c235' = 'Power BI (free)'
+        '8f0c5670-4e56-4892-b06d-91c085d7004f' = 'App Connect'
         '2b9c8e7c-319c-43a2-a2a0-48c5c6161de7' = 'Azure Active Directory Basic'
-        '09015f9f-377f-4538-bbb5-f75ceb09358a' = 'Project Plan 5'
-        '4a51bf65-409c-4a91-b845-1121b571cc9d' = 'Power Automate per user plan'
-        '6fd2c87f-b296-42f0-b197-1e91e994b900' = 'Office 365 E3'
-        '776df282-9fc0-4862-99e2-70e561b9909e' = 'Project Online Essentials'
-        '8c4ce438-32a7-4ac5-91a6-e22ae08d9c8b' = 'Rights Management Adhoc'
+        '47794cd0-f0e5-45c5-9033-2eb6b5fc84e0' = 'Communications Credits'
+        '6a4a1628-9b9a-424d-bed5-4118f0ede3fd' = 'Dynamics 365 Business Central for IWs'
+        '61e6bd70-fbdb-4deb-82ea-912842f39431' = 'Dynamics 365 Customer Service Insights Trial'
+        '1439b6e2-5d59-4873-8c59-d60e2a196e92' = 'Dynamics 365 Customer Service Professional'
+        'bc946dac-7877-4271-b2f7-99d2db13cd2c' = 'Dynamics 365 Customer Voice Trial'
+        '486d00d0-a31c-483f-8ef1-c87bfb2c940f' = 'Dynamics 365 Layout'
+        '338148b6-1b11-4102-afb9-f92b6cdc0f8d' = 'Dynamics 365 P1 Trial for Information Workers'
+        '28b81ef4-b535-4e5c-ae14-bd40148c89c5' = 'Dynamics 365 Project Service Automation'
+        'efccb6f7-5641-4e0e-bd10-b4976e1bf68e' = 'Enterprise Mobility + Security E3'
+        'b05e124f-c7cc-45a0-a6aa-8cf78c946968' = 'Enterprise Mobility + Security E5'
+        '0c266dff-15dd-4b49-8397-2bb16070ed52' = 'Microsoft 365 Audio Conferencing'
+        'df9561a4-4969-4e6a-8e73-c601b68ec077' = 'Microsoft 365 Audio Conferencing Pay-Per-Minute'
+        'd17b27af-3f49-4822-99f9-56a661538792' = 'Microsoft Dynamics CRM Online'
+        '906af65a-2970-46d5-9b58-4e9aa50f0657' = 'Microsoft Dynamics CRM Online Basic'
+        'dcb1a3ae-b33f-4487-846a-a640262fadf4' = 'Microsoft Power Apps Plan 2 Trial'
+        'f30db892-07e9-47e9-837c-80727f46fd3d' = 'Microsoft Power Automate Free'
+        '6470687e-a428-4b7a-bef2-8a291ad947c9' = 'Microsoft Store for Business'
+        '1f2f344a-700d-42c9-9427-5cea1d5d7ba6' = 'Microsoft Stream Trial'
         '710779e8-3d4a-4c88-adb9-386c958d1fdf' = 'Microsoft Teams Exploratory'
+        '18181a46-0d4e-45cd-891e-60aabd171b4e' = 'Office 365 E1'
+        '6fd2c87f-b296-42f0-b197-1e91e994b900' = 'Office 365 E3'
+        '4a51bf65-409c-4a91-b845-1121b571cc9d' = 'Power Automate per user plan'
+        'a403ebcc-fae0-4ca2-8c8c-7a907fd6c235' = 'Power BI (free)'
+        'f8a1db68-be16-40ed-86d5-cb42ce701560' = 'Power BI Pro'
+        'a10d5e58-74da-4312-95c8-76be4e5b75a0' = 'Project for Office 365'
+        '776df282-9fc0-4862-99e2-70e561b9909e' = 'Project Online Essentials'
+        '84cd610f-a3f8-4beb-84ab-d9d2c902c6c9' = 'Project Plan 1'
+        '53818b1b-4a27-454b-8896-0dba576410e6' = 'Project Plan 3'
+        '09015f9f-377f-4538-bbb5-f75ceb09358a' = 'Project Plan 5'
+        '2db84718-652c-47a7-860c-f10d8abbdae3' = 'Project Plan 5 without Project Client'
+        '8c4ce438-32a7-4ac5-91a6-e22ae08d9c8b' = 'Rights Management Adhoc'
+        'c5928f49-12ba-48f7-ada3-0d743a3601d5' = 'Visio Plan 2'
     }
 }
 
