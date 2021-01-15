@@ -29,6 +29,8 @@ function Connect-Exchange {
     }
     else { $Script:ConnectionUri = $ConnectionUri }
 
+    if ($Authentication -eq 'Basic' -and $Script:ConnectionUri -match '(http:)') { $Script:ConnectionUri = $Script:ConnectionUri -replace 'http:', 'https:' }
+
     $PSSessionParams = @{
 
         ConfigurationName = 'Microsoft.Exchange'
