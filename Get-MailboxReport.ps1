@@ -34,7 +34,7 @@ begin {
     # Use Exchange 2016 Management Shell or remote PowerShell from Windows 10 to an Exchange 2016 server.
     $PSSessionsByComputerName = Get-PSSession | Group-Object -Property ComputerName
     if (-not (Get-Command Get-MobileDeviceStatistics)) {
-        
+
         Write-Warning -Message "Command 'Get-MobileDeviceStatistics' is not available.  Make sure to run this script against Exchange 2016 or newer."
         break
     }
@@ -201,6 +201,7 @@ process {
             Database                      = $mr.Database
             MailboxSizeGB                 = ''
             MailboxItemCount              = ''
+            NewestSentItem                = ''
             ArchiveState                  = $mr.ArchiveState
             ArchiveDatabase               = $mr.ArchiveDatabase
             ArchiveSizeGB                 = ''
@@ -239,28 +240,24 @@ process {
 
         if ($mr.RecipientTypeDetails -notmatch '(^Remote.*)') {
 
-            # Working with a local mailbox.
+            # Only processing local mailboxes (we're not processing remote/migrated mailboxes).
 
             $MStats = $null
-            $MStats = $mr | Get-MailboxStatistics
-
-            $MStatsArchive = $null
-            if ($lmHT[$mr.Guid.Guid].ArchiveState -like 'Local') {
-                
-                $MStatsArchive = $mr | Get-MailboxStatistics -Archive
-            }
-
-            $MDevs = @()
-            $MDevs += Get-MobileDeviceStatistics -Mailbox $mr.Guid.Guid
-            
-            $RecentMDev = $null
-            $RecentMDev = $MDevs | Sort-Object -Property LastSuccessSync | Select-Object -Last 1
+            $MStats = $mr | Get-MailboxStatistics -ErrorAction Continue
 
             $MailboxSizeGB = try {
                 [math]::Round( ([decimal]($MStats.TotalItemSize -replace '(.*\()|(,)|(\s.*)') + [decimal]($MStats.TotalDeletedItemSize -replace '(.*\()|(,)|(\s.*)')) / 1GB, 2 )
             }
             catch { '' }
 
+            $MFSIStats = Get-MailboxFolderStatistics -Identity $mr.Guid.Guid -FolderScope SentItems -IncludeOldestAndNewestItems |
+            Sort-Object {$_.Identity -match '(Sent Items$)'}
+
+            $MStatsArchive = $null
+            if ($lmHT[$mr.Guid.Guid].ArchiveState -like 'Local') {
+
+                $MStatsArchive = $mr | Get-MailboxStatistics -Archive -ErrorAction Continue
+            }
             if ($MStatsArchive) {
 
                 $ArchiveSizeGB = try {
@@ -270,12 +267,22 @@ process {
 
                 $ArchiveItemCount = $MStatsArchive.ItemCount
             }
-            else { $ArchiveSizeGB = ''; $ArchiveItemCount = '' }
+            else {
+                $ArchiveSizeGB = ''
+                $ArchiveItemCount = ''
+            }
+
+            $MDevs = @()
+            $MDevs += Get-MobileDeviceStatistics -Mailbox $mr.Guid.Guid -ErrorAction Continue
+
+            $RecentMDev = $null
+            $RecentMDev = $MDevs | Sort-Object -Property LastSuccessSync | Select-Object -Last 1
 
             # Add the on-premises mailbox-related properties to the output object:
 
             $mrHT['MailboxSizeGB'] = $MailboxSizeGB
             $mrHT['MailboxItemCount'] = $MStats.ItemCount
+            $mrHT['NewestSentItem'] = $MFSIStats.NewestItemReceivedDate
             $mrHT['ArchiveState'] = $lmHT[$mr.Guid.Guid].ArchiveState
             $mrHT['ArchiveDatabase'] = $lmHT[$mr.Guid.Guid].ArchiveDatabase
             $mrHT['ArchiveSizeGB'] = $ArchiveSizeGB
