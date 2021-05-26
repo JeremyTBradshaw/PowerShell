@@ -36,7 +36,7 @@ param(
 
 
     [switch]$TestMode,
-    
+
     [ValidateRange(1, 50000)]
     [int]$ResultSetSize = 5000
 )
@@ -53,8 +53,6 @@ $Progress = @{
 
 $msExchRecipientTypeDetails = @{
 
-    # Just (local) mailboxes
-
     1             = 'UserMailbox'
     2             = 'LinkedMailbox'
     4             = 'SharedMailbox'
@@ -65,6 +63,10 @@ $msExchRecipientTypeDetails = @{
     16384         = 'SystemMailbox'
     8388608       = 'ArbitrationMailbox'
     536870912     = 'DiscoveryMailbox'
+    2147483648    = 'RemoteUserMailbox'
+    8589934592    = 'RemoteRoomMailbox'
+    17179869184   = 'RemoteEquipmentMailbox'
+    34359738368   = 'RemoteSharedMailbox'
     549755813888  = 'MonitoringMailbox'
     4398046511104 = 'AuditLogMailbox'
 }
@@ -95,7 +97,7 @@ $StopWatch2 = [System.Diagnostics.Stopwatch]::StartNew()
 
 $UserCounter = 0
 $AllMailboxUsers | & {
-    
+
     process {
 
         $UserCounter++
@@ -114,7 +116,7 @@ $AllMailboxUsers | & {
 
         $RecipientTypeDetails = ''
         if ($_.msExchRecipientTypeDetails) {
-    
+
             $RecipientTypeDetails = $msExchRecipientTypeDetails[($msExchRecipientTypeDetails.Keys -eq $_.msExchRecipientTypeDetails)][0]
         }
 
