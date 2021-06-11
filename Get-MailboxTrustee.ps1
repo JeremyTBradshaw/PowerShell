@@ -1,7 +1,5 @@
 <#
-
     .Synopsis
-
     Get all mailbox permissions:
 
     - FullAccess
@@ -17,51 +15,38 @@
     - Tasks
     - Sent Items
 
-    - Excludes mailbox permissions that are inherited, or for filtered trustee
-    accounts.
+    - Excludes mailbox permissions that are inherited, or for filtered trustee accounts.
 
-    - Excludes mailbox folder permissions 'None' and 'AvailabilityOnly, as well
-    as permissions for 'Default', 'Anonymous', or 'Unknown' (deleted/disbaled)
-    users.
-
+    - Excludes mailbox folder permissions 'None' and 'AvailabilityOnly, as well as permissions for 'Default',
+    'Anonymous', or 'Unknown' (deleted/disbaled) users.
 
     .Description
+    This script has been tested against Exchange 2010, Exchange 2016.  It is intended to be used with regular Windows
+    PowerShell.
 
-    This script has been tested against Exchange 2010, Exchange 2016, and
-    Exchange Online.  It is intended to be used with regular Windows PowerShell.
-
-    ***It is currently not intended for use with the Exchange Management Shell
-    (yet/until this note is removed).  This is due to how Select-Object behaves
-    with both -Property and -ExpandProperty used together.  Logic is going to be
-    added to deal with this on the fly, at which time the Exch. Mgmt. Shell will
-    work too.
-
+    ***It is currently not intended for use with the Exchange Management Shell (yet/until this note is removed).  This
+    is due to how Select-Object behaves with both -Property and -ExpandProperty used together.  Logic is going to be
+    added to deal with this on the fly, at which time the Exch. Mgmt. Shell will work too.
 
     .Parameter Identity [string]
-
-    Accepts pipeline input directly or by property name (caution not to pipe
-    directly from Exchange cmdlets to avoid concurrent/busy pipeline errors
-    (piping single objects is OK).  Instead, first store multiple objects in a
+    Accepts pipeline input directly or by property name (caution not to pipe directly from Exchange cmdlets to avoid
+    concurrent/busy pipeline errors (piping single objects is OK).  Instead, first store multiple objects in a
     variable, then pipe the variable (see examples).
 
-    Accepted properties from the pipeline are (because other properties have
-    proven to be failure-prone):
+    Accepted properties from the pipeline are (because other properties have proven to be failure-prone):
 
     - SamAccountName
     - Alias
     - PrimarySmtpAddress
     - Guid
 
-
     .Parameter FilterTrustees [string[]]
-
     Trustees to exclude permissions for. Review the $FilteredTrustees definition
     in the begin block to see which accounts are automatically filtered out.  Use
     the -FilterTrustees parameter to exclude additional trustees.
 
 
     .Parameter BypassPermissionTypes [string[]]
-
     Only the following values are accepted.  Multiple values can be comma-
     separated.
 
@@ -70,15 +55,11 @@
     - SendOnBehalf
     - Folders
 
-
     .Parameter MinimizeOutput [switch]
-
     When used, only the essential properties will be returned for both the
     mailbox and the trustee. Implies $ExpandTrusteeGroups:$true.
 
-
     .Outputs
-
     System.Management.Automation.PSCustomObject
 
     Default properties that are output:
@@ -99,40 +80,29 @@
     - AccessRights (same as above)
     - TrusteeGuid (trustee's Guid)
 
-
     .Example
-
     # Via the pipeline (single object):
 
     Get-Mailbox User1@jb365.ca |
     .\Get-MailboxTrustee.ps1 -FilterTrustees "adds\besadmin", "*jsmith*" -ExpandTrusteeGroups -BypassPermissionTypes:Folders
 
-
     .Example
-
     # Via the pipeline (multiple objects):
 
     $Mailboxes = Get-Mailbox -ResultSize:Unlimited
     $Mailboxes | .\Get-MailboxTrustee.ps1 -MinimizeOutput
 
-
     .Example
-
     # Via direct call:
 
     .\Get-MailboxTrustee.ps1 User1@jb365.ca -BypassPermissionTypes:SendAs,SendOnBehalf
 
     .\Get-MailboxTrustee.ps1 [Enter]
 
-
     .Link
-
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrustee.ps1
-    # ^ Get-MailboxTrustee.ps1
-
 
     .Link
-
     # New-MailboxTrusteeReverseLookup.ps1
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/New-MailboxTrusteeReverseLookup.ps1
 
@@ -144,36 +114,24 @@
 
     # Optimize-MailboxTrusteeWebInput.ps1
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Optimize-MailboxTrusteeWebInput.ps1
-
 #>
 
 #Requires -Version 3
 
 [CmdletBinding()]
-
 param (
-
     [Parameter(
         Mandatory = $true,
         ValueFromPipeline = $true,
         ValueFromPipelineByPropertyName = $true)]
-    [Alias(
-        'Alias',
-        'Guid',
-        'PrimarySmtpAddress',
-        'SamAccountName')]
+    [Alias('Alias', 'Guid', 'PrimarySmtpAddress', 'SamAccountName')]
     [string]$Identity,
 
     [string[]]$FilterTrustees,
 
-    # Making -MinimizeOutput imply -ExpandTrusteeGroups.
-    [switch]$ExpandTrusteeGroups = $MinimizeOutput,
+    [switch]$ExpandTrusteeGroups,
 
-    [ValidateSet(
-        'FullAccess',
-        'SendAs',
-        'SendOnBehalf',
-        'Folders')]
+    [ValidateSet('FullAccess', 'SendAs', 'SendOnBehalf', 'Folders')]
     [string[]]$BypassPermissionTypes,
 
     [switch]$MinimizeOutput
@@ -225,10 +183,7 @@ begin {
         # Check if we're in Exchange Online or On-Premises.
         switch ($ExPSSession.ComputerName) {
 
-            outlook.office365.com {
-                $Exchange = 'Exchange Online'
-                $LegacyExchange = $false
-            }
+            outlook.office365.com { throw "This script is not intended for use with Exchange Online.  Use Get-EXOMailboxTrustee.ps1 for that." }
 
             default {
                 $Exchange = 'Exchange On-Premises'
@@ -298,6 +253,8 @@ begin {
     $FilteredTrustees = '^(' + ($FilteredTrustees -join '|') + ')$'
     $FilteredTrustees = $FilteredTrustees -replace '\\\*', '.*'
 
+    # To avoid searching for the same trustee more than once, track all trustees and index them by their SID's for fast lookup performance:
+    $trusteeTracker = @{}
 
     function getTrustee {
         <#
@@ -470,7 +427,7 @@ begin {
                         $false {
 
                             Write-Debug "getTrusteeUseSid equals false"
-                        
+
                             # Same thing, get the current group's details.
                             $foundTrusteeGroup = Invoke-Command @icCommon -ScriptBlock {
 
@@ -645,15 +602,12 @@ begin {
     }
     Write-Progress @fpProgressProps -Status 'Ready'
     Start-Sleep -Milliseconds 500
-
 }
 
 process {
 
     # Placing all of the process block inside this single try block.  The purpose is to kill the script when something breaking occurs.  Use Verbose/Debug for troubleshooting.
     try {
-
-
         #-----------------------------------#
         #----- Initial Mailbox Lookoup -----#
         #-----------------------------------#
@@ -696,7 +650,7 @@ process {
 
             $faProgressCounter = 0
             Write-Progress @faProgressProps -Status 'Getting FullAccess permissions with Get-MailboxPermission'
-            Write-Verbose -Message "[Mailbox: $($mPSmtp)] Getting FullAccess permissions with Get-MailboxPermission."
+            Write-Verbose -Message "[Mailbox: $($mPSmtp)] $($faProgressProps.Status)."
 
             switch ($LegacyExchange) {
 
@@ -751,13 +705,22 @@ process {
                         $faProgressCounter++
                         Write-Progress @faProgressProps -PercentComplete (($faProgressCounter / $FullAccess.Count) * 100) -CurrentOperation "Trustee: $($_.User)" -Status 'Getting trustees with Get-User/Get-Group'
 
-                        $getTrusteeProps = @{
-                            trusteeSid    = $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value
-                            mailboxObject = $Mailbox
-                            accessRights  = 'FullAccess'
-                            expandGroup   = $ExpandTrusteeGroups
+                        if ($trusteeTracker.Keys -notcontains $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value) {
+
+                            $_thisTrustee = $null
+
+                            $getTrusteeProps = @{
+                                trusteeSid    = $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value
+                                mailboxObject = $Mailbox
+                                accessRights  = 'FullAccess'
+                                expandGroup   = $ExpandTrusteeGroups
+                            }
+
+                            $_thisTrustee = getTrustee @getTrusteeProps
+                            $_thisTrustee
+                            $trusteeTracker[$faTrustees[$($faIndexCounter)].SecurityIdentifier.Value] = $_thisTrustee
                         }
-                        getTrustee @getTrusteeProps
+                        else { $trusteeTracker[$faTrustees[$($faIndexCounter)].SecurityIdentifier.Value] }
 
                         $faIndexCounter++
                     }
@@ -794,13 +757,22 @@ process {
                         $faProgressCounter++
                         Write-Progress @faProgressProps -PercentComplete (($faProgressCounter / $FullAccess.Count) * 100) -CurrentOperation "Trustee: $($_.RawIdentity)" -Status 'Getting trustees with Get-User/Get-Group'
 
-                        $getTrusteeProps = @{
-                            trusteeSid    = $_.SecurityIdentifier
-                            mailboxObject = $Mailbox
-                            accessRights  = 'FullAccess'
-                            expandGroup   = $ExpandTrusteeGroups
+                        if ($trusteeTracker.Keys -notcontains $_.SecurityIdentifier) {
+
+                            $_thisTrustee = $null
+
+                            $getTrusteeProps = @{
+                                trusteeSid    = $_.SecurityIdentifier
+                                mailboxObject = $Mailbox
+                                accessRights  = 'FullAccess'
+                                expandGroup   = $ExpandTrusteeGroups
+                            }
+
+                            $_thisTrustee = getTrustee @getTrusteeProps
+                            $_thisTrustee
+                            $trusteeTracker[$_.SecurityIdentifier] = $_thisTrustee
                         }
-                        getTrustee @getTrusteeProps
+                        else { $trusteeTracker[$_.SecurityIdentifier] }
 
                         $faIndexCounter++
                     }
@@ -819,35 +791,105 @@ process {
 
         if ($BypassPermissionTypes -notcontains 'SendAs') {
 
-            switch ($Exchange) {
+            $saProgressCounter = 0
+            Write-Progress @saProgressProps -Status 'Getting Send-As permissions with Get-ADPermission'
+            Write-Verbose -Message "[Mailbox: $($mPSmtp)] $($saProgressProps.Status)."
 
-                "Exchange Online" {
+            switch ($LegacyExchange) {
 
-                    $saProgressCounter = 0
-                    Write-Progress @saProgressProps -Status 'Getting Send-As permissions with Get-RecipientPermission'
-                    Write-Verbose -Message "[Mailbox: $($mPSmtp)] Getting Send-As permissions with Get-RecipientPermission."
+                $true {
 
-                    $RecipientPermissions = @()
-                    $RecipientPermissions += Invoke-Command @icCommon -ScriptBlock {
+                    $ADPermissions = @()
+                    $ADPermissions += Invoke-Command @icCommon -ScriptBlock {
 
-                        Get-RecipientPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
-                        Select-Object Trustee, AccessRights, IsInherited, Deny
+                        Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
+                        Select-Object User, ExtendedRights, IsInherited, Deny
                     }
 
                     # Apply filters.
                     $SendAs = @()
-                    $SendAs += $RecipientPermissions |
+                    $SendAs += $ADPermissions |
                     Where-Object {
                         -not
-                        ($_.Trustee -like 'S-1-5*') -and -not
-                        ($_.Trustee -like 'NT AUTHORITY\*') -and
-                        ($_.AccessRights -like '*SendAs*') -and
+                        ($_.User -match $FilteredTrustees) -and
+                        ($_.ExtendedRights -like '*Send-As*') -and
+                        ($_.IsInherited -eq $false) -and
+                        ($_.Deny -ne $true) # <--: Comes back empty instead of $false when remoting.
+                    }
+
+                    $saIndex = @()
+                    $SendAs |
+                    ForEach-Object {
+                        $saIndex += $ADPermissions.IndexOf($_)
+                    }
+
+                    Write-Verbose -Message "[Mailbox: $($mPSmtp)] Expanding 'User' property for all SendAs permissions."
+
+                    $saTrustees = @()
+                    $saTrustees += Invoke-Command @icCommon -ScriptBlock {
+
+                        Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
+                        Select-Object -Index $Using:saIndex |
+                        Select-Object -ExpandProperty User |
+                        Select-Object -Property SecurityIdentifier
+                    }
+
+                    if ($SendAs.Count -ge 1) {
+                        Write-Verbose -Message "[Mailbox: $($mPSmtp)] Processing Send-As trustees."
+                    }
+
+                    # Initialize counter for FullAccess permissions to process.
+                    $saIndexCounter = 0
+
+                    $SendAs |
+                    Select-Object -Index (0..999) |
+                    ForEach-Object {
+
+                        $saProgressCounter++
+                        Write-Progress @saProgressProps -PercentComplete (($saProgressCounter / $SendAs.Count) * 100) -CurrentOperation "Trustee: $($_.User)" -Status 'Getting trustees with Get-User/Get-Group'
+
+                        if ($trusteeTracker.Keys -notcontains $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value) {
+
+                            $_thisTrustee = $null
+
+                            $getTrusteeProps = @{
+                                trusteeSid    = $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value
+                                mailboxObject = $Mailbox
+                                accessRights  = 'SendAs'
+                                expandGroup   = $ExpandTrusteeGroups
+                            }
+
+                            $_thisTrustee = getTrustee @getTrusteeProps
+                            $_thisTrustee
+                            $trusteeTracker[$saTrustees[$($saIndexCounter)].SecurityIdentifier.Value] = $_thisTrustee
+                        }
+                        else { $trusteeTracker[$saTrustees[$($saIndexCounter)].SecurityIdentifier.Value] }
+
+                        $saIndexCounter++
+                    }
+                } # end switch ($LegacyExchange) { $true {*} }
+
+                $false {
+
+                    $ADPermissions = Invoke-Command @icCommon -ScriptBlock {
+
+                        Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
+                        Select-Object ExtendedRights, IsInherited, Deny -ExpandProperty User
+                    }
+
+                    # Apply filters.
+                    $SendAs = @()
+                    $SendAs += $ADPermissions |
+                    Where-Object {
+                        -not
+                        ($_.RawIdentity -match $FilteredTrustees) -and
+                        ($_.ExtendedRights -like '*Send-As*') -and
                         ($_.IsInherited -eq $false) -and
                         ($_.Deny -ne $true) # <--: Comes back empty instead of $false when remoting.
                     }
 
                     if ($SendAs.Count -ge 1) {
-                        Write-Verbose -Message "[Mailbox: $($mPSmtp)] Processing Send-As trustees."
+                        Write-Verbose -Message "[Mailbox: $($mPSmtp)] Processing SendAs trustees."
                     }
 
                     $SendAs |
@@ -855,220 +897,29 @@ process {
                     ForEach-Object {
 
                         $saProgressCounter++
-                        Write-Progress @saProgressProps -PercentComplete (($saProgressCounter / $SendAs.Count) * 100) -CurrentOperation "Trustee: $($_.Trustee)" -Status 'Getting trustees with Get-User/Get-Group'
+                        Write-Progress @saProgressProps -PercentComplete (($saProgressCounter / $SendAs.Count) * 100) -CurrentOperation "Trustee: $($_.RawIdentity)" -Status 'Getting trustees with Get-User/Get-Group'
 
-                        # We will output our EXO Send-As trustee here since we can't get a Sid or a Guid from Get-RecipientPermission's Trustee property, hence getTrustee won't work.
-                        $saTrusteeId = $null
-                        $saTrusteeId = $_.Trustee
+                        if ($trusteeTracker.Keys -notcontains $_.SecurityIdentifier) {
 
-                        $saFoundTrustee = @()
-                        $saFoundTrustee += Invoke-Command @icCommon -ScriptBlock {
-
-                            Get-User -Identity $Using:saTrusteeId -ErrorAction:SilentlyContinue
-                        }
-
-                        if ($null -eq $saFoundTrustee) {
-
-                            $saFoundTrustee += Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-Group -Identity "$($Using:saTrusteeId)" -ErrorAction:SilentlyContinue
-                            }
-                        }
-
-                        # Initialize output object.
-                        $saTrusteeReturned = $null
-                        $saTrusteeReturned = [PSCustomObject]@{placeholder = $null }
-
-                        # Load the current mailbox' properties into our custom object.
-                        switch ($MinimizeOutput) {
-
-                            $true {
-                                $saTrusteeReturned |
-                                Add-Member -NotePropertyName 'Guid' -NotePropertyValue $Mailbox.Guid
-                            }
-                            $false {
-                                $Mailbox |
-                                Get-Member -MemberType Properties |
-                                ForEach-Object {
-
-                                    $saTrusteeReturned |
-                                    Add-Member -NotePropertyName $_.Name -NotePropertyValue $Mailbox.$($_.Name)
-                                }
-                            }
-                        }
-
-                        # Add our PermissionType and AccessRights properties.
-                        $saTrusteeReturned |
-                        Add-Member -NotePropertyName 'PermissionType' -NotePropertyValue 'Mailbox' -PassThru |
-                        Add-Member -NotePropertyName 'AccessRights' -NotePropertyValue 'Send-As'
-
-
-                        # If trustee was not found (or returned multiple matches), make note of this in the TrusteeGuid property (since it is output even when -MinimizeOutput is used).
-                        if ($safoundTrustee.Count -ne 1) {
-
-                            $saTrusteeReturned |
-                            Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue "Not found or ambiguous ($($saTrusteeId))"
-
-                            if (-not ($MinimizeOutput)) {
-
-                                $saTrusteeReturned |
-                                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue '' -PassThru |
-                                Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue '' -PassThru |
-                                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue ''
-                            }
-
-                            Write-Output $saTrusteeReturned |
-                            Select-Object -Property * -ExcludeProperty GrantSendOnBehalfTo, placeholder, PS*ComputerName, RunspaceId
-                        }
-
-                        # If trustee was found, is a group, and we're expanding groups... send its SID up to getTrustee for processing.
-                        elseif (($saFoundTrustee.RecipientTypeDetails -like '*group*') -and ($ExpandTrusteeGroups -eq $true)) {
+                            $_thisTrustee = $null
 
                             $getTrusteeProps = @{
-                                trusteeSid    = $saFoundTrustee.Sid
+                                trusteeSid    = $_.SecurityIdentifier
                                 mailboxObject = $Mailbox
                                 accessRights  = 'SendAs'
-                                expandGroup   = $true
-                            }
-                            getTrustee @getTrusteeProps
-                        }
-
-                        # If our logic is correct, we've got a fully loaded trustee object to return.
-                        else {
-                            $saTrusteeReturned |
-                            Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $saFoundTrustee.Guid
-
-                            if (-not ($MinimizeOutput)) {
-
-                                $saTrusteeReturned |
-                                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $saFoundTrustee.RecipientTypeDetails -PassThru |
-                                Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $saFoundTrustee.DisplayName -PassThru |
-                                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $saFoundTrustee.WindowsEmailAddress
+                                expandGroup   = $ExpandTrusteeGroups
                             }
 
-                            Write-Output $saTrusteeReturned |
-                            Select-Object -Property * -ExcludeProperty GrantSendOnBehalfTo, placeholder, PS*ComputerName, RunspaceId
+                            $_thisTrustee = getTrustee @getTrusteeProps
+                            $_thisTrustee
+                            $trusteeTracker[$_.SecurityIdentifier] = $_thisTrustee
                         }
+                        else { $trusteeTracker[$_.SecurityIdentifier] }
+
                         $saIndexCounter++
-
-                    } # end SendAs | ForEach-Object {}
-                } # end $Exchange -eq 'Exchange Online'
-
-                "Exchange On-Premises" {
-
-                    $saProgressCounter = 0
-                    Write-Progress @saProgressProps -Status 'Getting Send-As permissions with Get-ADPermission'
-                    Write-Verbose -Message "[Mailbox: $($mPSmtp)] Getting Send-As permissions with Get-ADPermission."
-
-                    switch ($LegacyExchange) {
-
-                        $true {
-
-                            $ADPermissions = @()
-                            $ADPermissions += Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
-                                Select-Object User, ExtendedRights, IsInherited, Deny
-                            }
-
-                            # Apply filters.
-                            $SendAs = @()
-                            $SendAs += $ADPermissions |
-                            Where-Object {
-                                -not
-                                ($_.User -match $FilteredTrustees) -and
-                                ($_.ExtendedRights -like '*Send-As*') -and
-                                ($_.IsInherited -eq $false) -and
-                                ($_.Deny -ne $true) # <--: Comes back empty instead of $false when remoting.
-                            }
-
-                            $saIndex = @()
-                            $SendAs |
-                            ForEach-Object {
-                                $saIndex += $ADPermissions.IndexOf($_)
-                            }
-
-                            Write-Verbose -Message "[Mailbox: $($mPSmtp)] Expanding 'User' property for all SendAs permissions."
-
-                            $saTrustees = @()
-                            $saTrustees += Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
-                                Select-Object -Index $Using:saIndex |
-                                Select-Object -ExpandProperty User |
-                                Select-Object -Property SecurityIdentifier
-                            }
-
-                            if ($SendAs.Count -ge 1) {
-                                Write-Verbose -Message "[Mailbox: $($mPSmtp)] Processing Send-As trustees."
-                            }
-
-                            # Initialize counter for FullAccess permissions to process.
-                            $saIndexCounter = 0
-
-                            $SendAs |
-                            Select-Object -Index (0..999) |
-                            ForEach-Object {
-
-                                $saProgressCounter++
-                                Write-Progress @saProgressProps -PercentComplete (($saProgressCounter / $SendAs.Count) * 100) -CurrentOperation "Trustee: $($_.User)" -Status 'Getting trustees with Get-User/Get-Group'
-
-                                $getTrusteeProps = @{
-                                    trusteeSid    = $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value
-                                    mailboxObject = $Mailbox
-                                    accessRights  = 'SendAs'
-                                    expandGroup   = $ExpandTrusteeGroups
-                                }
-                                getTrustee @getTrusteeProps
-
-                                $saIndexCounter++
-                            }
-                        } # end $Legacy -eq $true
-
-                        $false {
-
-                            $ADPermissions = Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-ADPermission -Identity $Using:mGuid -ErrorAction:SilentlyContinue |
-                                Select-Object ExtendedRights, IsInherited, Deny -ExpandProperty User
-                            }
-
-                            # Apply filters.
-                            $SendAs = @()
-                            $SendAs += $ADPermissions |
-                            Where-Object {
-                                -not
-                                ($_.RawIdentity -match $FilteredTrustees) -and
-                                ($_.ExtendedRights -like '*Send-As*') -and
-                                ($_.IsInherited -eq $false) -and
-                                ($_.Deny -ne $true) # <--: Comes back empty instead of $false when remoting.
-                            }
-
-                            if ($SendAs.Count -ge 1) {
-                                Write-Verbose -Message "[Mailbox: $($mPSmtp)] Processing SendAs trustees."
-                            }
-
-                            $SendAs |
-                            Select-Object -Index (0..999) |
-                            ForEach-Object {
-
-                                $saProgressCounter++
-                                Write-Progress @saProgressProps -PercentComplete (($saProgressCounter / $SendAs.Count) * 100) -CurrentOperation "Trustee: $($_.RawIdentity)" -Status 'Getting trustees with Get-User/Get-Group'
-
-                                $getTrusteeProps = @{
-                                    trusteeSid    = $_.SecurityIdentifier
-                                    mailboxObject = $Mailbox
-                                    accessRights  = 'SendAs'
-                                    expandGroup   = $ExpandTrusteeGroups
-                                }
-                                getTrustee @getTrusteeProps
-
-                                $saIndexCounter++
-                            }
-                        } # end $LegacyExchange -eq $false
-                    } # end switch ($LegacyExchange)
-                } # end $Exchange -eq 'Exchange On-Premises'
-            } # end switch ($Exchange)
+                    }
+                }  # end switch ($LegacyExchange) { $false {*} }
+            } # end switch ($LegacyExchange) {*}
 
             Write-Progress @saProgressProps -Status 'Ready'
             Write-Verbose -Message "[Mailbox: $($mPSmtp)] Send-As discovery complete."
@@ -1084,8 +935,7 @@ process {
 
             $sobProgressCounter = 0
             Write-Progress @sobProgressProps -Status 'Checking for Send on Behalf trustees in GrantSendOnBehalfTo property'
-
-            Write-Verbose -Message "[Mailbox: $($mPSmtp)] Checking for Send on Behalf trustees in GrantSendOnBehalfTo property."
+            Write-Verbose -Message "[Mailbox: $($mPSmtp)] $($sobProgressProps.Status)."
 
             if ($Mailbox.GrantSendOnBehalfTo.Count -ge 1) {
 
@@ -1142,7 +992,7 @@ process {
                 $fpProgressCounter = 0
 
                 Write-Progress @fpProgressProps -Status "Getting $($Folder) permissions with Get-MailboxFolderPermission"
-                Write-Verbose -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] Getting $($Folder) permissions with Get-MailboxFolderPermission."
+                Write-Verbose -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] $($fpProgressProps.Status)."
 
                 switch ($LegacyExchange) {
 
@@ -1203,17 +1053,26 @@ process {
 
                             if (-not ([string]::IsNullOrEmpty("$($fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid)"))) {
 
-                                $getTrusteeProps = @{
-                                    trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
-                                    mailboxObject = $Mailbox
-                                    accessRights  = $_.AccessRights -join ';'
-                                    folder        = $true
-                                    folderName    = $Folder
-                                    expandGroup   = $ExpandTrusteeGroups
-                                }
+                                if ($trusteeTracker.Keys -notcontains $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid) {
 
-                                getTrustee @getTrusteeProps
+                                    $_thisTrustee = $null
+
+                                    $getTrusteeProps = @{
+                                        trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
+                                        mailboxObject = $Mailbox
+                                        accessRights  = $_.AccessRights -join ';'
+                                        folder        = $true
+                                        folderName    = $Folder
+                                        expandGroup   = $ExpandTrusteeGroups
+                                    }
+
+                                    $_thisTrustee = getTrustee @getTrusteeProps
+                                    $_thisTrustee
+                                    $trusteeTracker[$fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid] = $_thisTrustee
+                                }
+                                else { $trusteeTracker[$fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid] }
                             }
+
                             $pfpIndexCounter++
 
                         } # end $PertinentFolderPermissions | ForEach-Object {}
@@ -1254,16 +1113,26 @@ process {
 
                             if (-not ([string]::IsNullOrEmpty("$($_.ADRecipient.Sid)"))) {
 
-                                $getTrusteeProps = @{
-                                    trusteeSid    = $_.ADRecipient.Sid
-                                    mailboxObject = $Mailbox
-                                    accessRights  = $_.AccessRights -join ';'
-                                    folder        = $true
-                                    folderName    = $Folder
-                                    expandGroup   = $ExpandTrusteeGroups
-                                }
+                                if ($trusteeTracker.Keys -notcontains $_.ADRecipient.Sid) {
 
-                                getTrustee @getTrusteeProps
+                                    $_thisTrustee = $null
+
+                                    $getTrusteeProps = @{
+                                        trusteeSid    = $_.ADRecipient.Sid
+                                        mailboxObject = $Mailbox
+                                        accessRights  = $_.AccessRights -join ';'
+                                        folder        = $true
+                                        folderName    = $Folder
+                                        expandGroup   = $ExpandTrusteeGroups
+                                    }
+
+                                    $_thisTrustee = getTrustee @getTrusteeProps
+                                    $_thisTrustee
+                                    $trusteeTracker[$_.ADRecipient.Sid] = $_thisTrustee
+                                }
+                                else { $trusteeTracker[$_.ADRecipient.Sid] }
+
+                                $pfpIndexCounter++
                             }
                         } # end $PertientFolderPermissions | ForEach-Object {}
                     } # end $LegacyExchange -eq $false
@@ -1280,8 +1149,8 @@ process {
         #--------- Process Wrap-Up ---------#
         #-----------------------------------#
 
-        # Close try block.
-    }
+
+    } # Close try block.
 
     # Session problems go here:
     catch [System.Management.Automation.CommandNotFoundException],
@@ -1291,10 +1160,7 @@ process {
         Write-Warning -Message 'Mailboxes processed/total (if available): $MailboxCounter / $PipelineObjectCount'
         Write-Warning -Message 'Consider using a helper script to test and recreate the session every X number of processed mailboxes.'
         Write-Warning -Message 'Also try using the -Verbose or -Debug switches.'
-        Write-Error $Error[0]
-        Write-Warning -Message "Date/time: $(Get-Date -Format G)"
-        Write-Warning -Message 'Sleeping for 60 seconds before moving onto the next mailbox, if any remain.'
-        Start-Sleep -Seconds 60
+        throw
     }
 
     # Other problems go here:
