@@ -2,12 +2,11 @@ function writeLog {
     [CmdletBinding()]
     param (
         [Parameter(Mandatory)][string]$LogName,
+        [Parameter(Mandatory)][datetime]$LogDateTime,
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
-        [Parameter(Mandatory, ValueFromPipeline)][string]$Message,
+        [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][string]$Message,
         [ErrorRecord]$ErrorRecord,
-        [datetime]$LogDateTime = [datetime]::Now,
         [switch]$DisableLogging,
-        [switch]$SectionStart,
         [switch]$PassThru
     )
 
@@ -17,19 +16,16 @@ function writeLog {
 
                 [void](New-Item -Path $Folder -ItemType Directory -ErrorAction Stop)
             }
+
             $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
             if (-not (Test-Path $LogFile)) {
 
                 [void](New-Item -Path $LogFile -ItemType:File -ErrorAction Stop)
             }
 
-            $Date = Get-Date -Format 'yyyy-MM-dd hh:mm:ss tt'
-            $MessageText = "[ $($Date) ] $($Message)"
-            switch ($SectionStart) {
+            $Date = [datetime]::Now.ToString('yyyy-MM-dd hh:mm:ss tt')
 
-                $true { $MessageText = "`r`n" + $MessageText }
-            }
-            $MessageText | Out-File -FilePath $LogFile -Append
+            "[ $($Date) ] $($Message)" | Out-File -FilePath $LogFile -Append
 
             if ($PSBoundParameters.ErrorRecord) {
 
@@ -42,8 +38,11 @@ function writeLog {
                 "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
                 Out-File -FilePath $LogFile -Append -ErrorAction Stop
             }
+
+            if ($PassThru) { $Message }
+            else { Write-Verbose -Message $Message }
         }
         catch { throw $_ }
     }
-    if ($PassThru) { $Message }
+    else { Write-Verbose -Message $Message }
 }
