@@ -1,6 +1,6 @@
 <#
     .Synopsis
-    Remove old Exchange server logs of various types (*.log, *.blg, and *.etl) to free of disk space.
+    Remove old Exchange server logs of various types (*.log, *.blg, and *.etl) to free up disk space.
 
     .Description
     Intended for Exchange Server 2013 and newer.  Configure a scheduled task on the Exchange server as follows:
