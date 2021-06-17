@@ -60,7 +60,16 @@ try {
         $Mailboxes += Get-Mailbox -ResultSize Unlimited -WarningAction SilentlyContinue -ErrorAction Stop
     }
     else {
-        $Mailboxes += foreach ($id in $Identity) { Get-Mailbox -Identity $id -ResultSize 1 -WarningAction SilentlyContinue -ErrorAction Stop }
+        $Mailboxes += foreach ($id in $Identity) {
+
+            try {
+                Get-Mailbox -Identity $id -ResultSize 1 -WarningAction SilentlyContinue -ErrorAction Stop
+            }
+            catch {
+                <# Warn only if no mailbox is found for the supplied ID #>
+                Write-Warning -Message "Failed on Get-Mailbox for ID '$($id)'."
+            }
+        }
     }
     if ($Mailboxes.Count -eq 0) {
 

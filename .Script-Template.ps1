@@ -90,7 +90,7 @@ function writeLog {
             if ($PassThru) { $Message }
             else { Write-Verbose -Message $Message }
         }
-        catch { throw $_ }
+        catch { throw }
     }
     else { Write-Verbose -Message $Message }
 }
@@ -114,7 +114,7 @@ try {
         Folder      = "$($PSCmdlet.MyInvocation.MyCommand.Source -replace '\.ps1')_Logs"
         ErrorAction = 'Stop'
     }
-    writeLog @writeLogParams -SectionStart -Message "$($PSCmdlet.MyInvocation.MyCommand.Name) - Start"
+    writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand.Name) - Start"
     writeLog @writeLogParams -Message "MyCommand: $($PSCmdlet.MyInvocation.Line)"
 
     # 2. Import static data from external PSD1:
@@ -164,9 +164,9 @@ try {
 
 }
 catch {
-    writeLog @writeLogParams -Message 'Script-ending problem encountered' -ErrorRecord $_ -PassThru | Write-Warning
+    writeLog @writeLogParams -Message 'Script-ending problem encountered.' -ErrorRecord $_ -PassThru | Write-Warning
     throw
 }
 finally {
-    writeLog @writeLogParams -Message "$($MyInvocation.MyCommand.Name) - End"
+    writeLog @writeLogParams -Message "$($PSCmdlet.MyInvocation.MyCommand.Name) - End"
 }

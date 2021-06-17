@@ -5,7 +5,7 @@ function writeLog {
         [Parameter(Mandatory)][datetime]$LogDateTime,
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][string]$Message,
-        [ErrorRecord]$ErrorRecord,
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
         [switch]$DisableLogging,
         [switch]$PassThru
     )
@@ -42,7 +42,7 @@ function writeLog {
             if ($PassThru) { $Message }
             else { Write-Verbose -Message $Message }
         }
-        catch { throw $_ }
+        catch { throw }
     }
     else { Write-Verbose -Message $Message }
 }
