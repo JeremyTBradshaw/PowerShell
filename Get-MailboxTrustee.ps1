@@ -452,9 +452,9 @@ begin {
 
             if ([string]::IsNullOrEmpty($foundTrustee.DisplayName)) {
 
-                $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.Name
+                $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.Name
             }
-            else { $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.DisplayName }
+            else { $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.DisplayName }
         }
 
         # Finally, return the finished product.
@@ -517,10 +517,15 @@ process {
         Write-Verbose -Message "Getting mailbox with identity '$($Identity)'."
 
         $Mailbox = $null
-        $Mailbox = Invoke-Command @icCommon -ScriptBlock {
+        $Mailbox = Invoke-Command -Session $ExPSSession[0] -HideComputerName -ErrorAction SilentlyContinue -ScriptBlock {
 
             Get-Mailbox -Identity $Using:Identity -WarningAction:SilentlyContinue -ErrorAction:Stop |
             Select-Object -Property DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid, GrantSendOnBehalfTo
+        }
+        if ($null -eq $Mailbox) {
+
+            Write-Warning -Message "Failed to find a mailbox (via Get-Mailbox) for identity '$($Identity)'."
+            throw 90210
         }
 
         # Store the mailbox' PrimarySmtpAddress for use with Write-Progress|Verbose|Debug.
@@ -1000,12 +1005,15 @@ process {
 
     # Other problems go here, and do not terminate the script, just this mailbox:
     catch {
-        'A problem has caused the script to fail.' +
-        "Mailboxes processed/total (if available): $($MyInvocation.PipelinePosition) / $($MyInvocation.PipelineLength)" | Write-Warning
+        # Deal with mailbox not found's first:
+        if ($_.Exception -match '(90210)') { continue }
+
+        # All other/unexpected errors next:
+        'A problem has caused the script to fail (error to follow):' | Write-Warning
         Write-Error $_
+        "Mailboxes processed: $($MailboxProcessedCounter)" | Write-Warning
         "Date/time: $(Get-Date -Format G)`n" +
-        'Sleeping for 30 seconds before moving onto the next mailbox, if any remain.' | Write-Warning
-        Start-Sleep -Seconds 30
+        'Moving onto the next mailbox, if any remain.' | Write-Warning
     }
 } # end process
 
