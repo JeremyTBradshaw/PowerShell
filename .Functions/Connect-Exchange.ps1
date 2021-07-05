@@ -1,4 +1,3 @@
-#Requires -Version 5.1
 function Connect-Exchange {
     [CmdletBinding(DefaultParameterSetName = 'ConnectionUri')]
     param (
@@ -48,11 +47,16 @@ function Connect-Exchange {
     try {
         $Session = New-PSSession @PSSessionParams -ErrorAction Stop
 
-        $ImportSessionParams = @{ Session = $Session }
+        $ImportSessionParams = @{
+
+            Session             = $Session
+            DisableNameChecking = $true
+            ErrorAction         = 'Stop'
+        }
         if ($Prefix) {
             $ImportSessionParams['Prefix'] = $Prefix
         }
-        Import-PSSession @ImportSessionParams -ErrorAction Stop
+        Import-PSSession @ImportSessionParams
     }
     catch { throw $_ }
 }
