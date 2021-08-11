@@ -525,7 +525,7 @@ process {
         if ($null -eq $Mailbox) {
 
             Write-Warning -Message "Failed to find a mailbox (via Get-Mailbox) for identity '$($Identity)'."
-            throw 90210
+            return
         }
 
         # Store the mailbox' PrimarySmtpAddress for use with Write-Progress|Verbose|Debug.
@@ -1005,10 +1005,6 @@ process {
 
     # Other problems go here, and do not terminate the script, just this mailbox:
     catch {
-        # Deal with mailbox not found's first:
-        if ($_.Exception -match '(90210)') { continue }
-
-        # All other/unexpected errors next:
         'A problem has caused the script to fail (error to follow):' | Write-Warning
         Write-Error $_
         "Mailboxes processed: $($MailboxProcessedCounter)" | Write-Warning
