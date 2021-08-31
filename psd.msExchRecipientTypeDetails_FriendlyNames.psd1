@@ -1,5 +1,5 @@
 # Source: https://answers.microsoft.com/en-us/msoffice/forum/msoffice_o365admin-mso_exchon-mso_o365b/recipient-type-values/7c2620e5-9870-48ba-b5c2-7772c739c651
-$RecipientTypeDetailsFriendlyNames = @{
+RecipientTypeDetailsFriendlyNames = @{
 
     1           = 'UserMailbox'
     2           = 'LinkedMailbox'
