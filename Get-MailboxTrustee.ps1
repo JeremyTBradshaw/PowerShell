@@ -212,7 +212,7 @@ begin {
     # To avoid searching for the same trustee more than once, track all trustees and index them by their SID's for fast lookup performance:
     $trusteeTracker = @{}
 
-    function getTrustee {
+    function getTrusteeObject {
         [CmdletBinding()]
         param (
             [Parameter(Mandatory = $true)]
@@ -229,10 +229,10 @@ begin {
             [switch]$expandGroups
         )
 
-        Write-Verbose "[function: getTrustee][Mailbox: $($mailboxObject.PrimarySmtpAddress)][Trustee: $($trusteeSid)][Folder: $($folder)][AccessRights: $($accessRights -join ',')]."
+        Write-Verbose "[function: getTrusteeObject][Mailbox: $($mailboxObject.PrimarySmtpAddress)][Trustee: $($trusteeSid)][Folder: $($folder)][AccessRights: $($accessRights -join ',')]."
 
         # Initialize output object and falsify $trusteeGroupExpansionComplete variable.
-        $trusteeReturned = [PSCustomObject]@{}
+        $trusteeObject = [PSCustomObject]@{}
         $trusteeGroupExpansionComplete = $false
 
         # Update the object with properties from our mailbox.
@@ -240,7 +240,7 @@ begin {
         Get-Member -MemberType Properties |
         ForEach-Object {
 
-            $trusteeReturned |
+            $trusteeObject |
             Add-Member -NotePropertyName $_.Name -NotePropertyValue $mailboxObject.$($_.Name)
         }
 
@@ -258,7 +258,7 @@ begin {
 
             # If folder switch was used (i.e. $true), we're working with mailbox folder permissions.
             $true {
-                $trusteeReturned |
+                $trusteeObject |
                 Add-Member -NotePropertyName 'PermissionType' -NotePropertyValue $folderName -PassThru |
                 Add-Member -NotePropertyName 'AccessRights' -NotePropertyValue $accessRights
             }
@@ -268,19 +268,19 @@ begin {
                 switch ($accessRights) {
 
                     FullAccess {
-                        $trusteeReturned |
+                        $trusteeObject |
                         Add-Member -NotePropertyName 'PermissionType' -NotePropertyValue 'Mailbox' -PassThru |
                         Add-Member -NotePropertyName 'AccessRights' -NotePropertyValue 'FullAccess'
                     }
 
                     SendAs {
-                        $trusteeReturned |
+                        $trusteeObject |
                         Add-Member -NotePropertyName 'PermissionType' -NotePropertyValue 'Mailbox' -PassThru |
                         Add-Member -NotePropertyName 'AccessRights' -NotePropertyValue 'Send-As'
                     }
 
                     SendOnBehalf {
-                        $trusteeReturned |
+                        $trusteeObject |
                         Add-Member -NotePropertyName 'PermissionType' -NotePropertyValue 'Mailbox' -PassThru |
                         Add-Member -NotePropertyName 'AccessRights' -NotePropertyValue 'Send on Behalf'
                     }
@@ -288,180 +288,156 @@ begin {
             } # end $folder -eq $false
         } # end switch ($folder)
 
-        # Start with a fresh $null $foundTrustee.
-        $foundTrustee = $null
+        # Check if we've already seen this trustee and if so reuse the info:
+        if (-not $trusteeTracker[$trusteeSid]) {
 
-        # Determine if we've received a SID or Guid for $trusteeSid
-        # Send on Behalf section sends a Guid because Exchange 2010's -ExandedProperty GrantSendOnBehalfTo doesn't include the SID.
-        # Meanwhile Get-MailboxPermission and Get-ADPermission supply us with the SID but not the Guid.
-        if ($trusteeSid -like 'S-1-5*') { $getTrusteeUseSid = $true }
-        else { $getTrusteeUseSid = $false }
+            # Start with a fresh $null $foundTrustee.
+            $foundTrustee = $null
 
-        switch ($getTrusteeUseSid) {
+            # Determine if we've received a SID or Guid for $trusteeSid
+            # Send on Behalf section sends a Guid because Exchange 2010's -ExandedProperty GrantSendOnBehalfTo doesn't include the SID.
+            # Meanwhile Get-MailboxPermission and Get-ADPermission supply us with the SID but not the Guid.
+            if ($trusteeSid -like 'S-1-5*') {
 
-            # $trusteeSid came in as a SID.
-            $true {
-                $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
+                $filter = "Sid -eq '$($trusteeSid)' -or SidHistory -eq '$($trusteeSid)'"
+            }
+            else { $filter = "Guid -eq '$($trusteeSid)" }
 
-                    Get-User -Filter "Sid -eq '$($Using:trusteeSid)' -or SidHistory -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                    Select-Object $Using:trusteeProps
-                }
+            $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
+
+                Get-User -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                Select-Object $Using:trusteeProps
             }
 
-            # $trusteeSid came in as a Guid (i.e. from Send on Behalf section).
-            $false {
-                $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
+            # If no trustee (user) was found, search groups.
+            if ($null -eq $foundTrustee) {
 
-                    Get-User -Filter "Guid -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                    Select-Object $Using:trusteeProps
-                }
-            }
-        } # end switch ($getTrusteeUseSid) (#1)
+                # Determine if group members should be resolved.
+                switch ($expandGroups) {
 
-        # If no trustee (user) was found, search groups.
-        if ($null -eq $foundTrustee) {
+                    # We are resolving group members (i.e. expanding groups).
+                    $true {
+                        Write-Verbose -Message "[function: getTrusteeObject][Mailbox: $($mailboxObject.PrimarySmtpAddress)] Searching for and expanding group $($trusteeSid)."
 
-            # Determine if group members should be resolved.
-            switch ($expandGroups) {
+                        $foundTrusteeGroup = $null
+                        $foundTrustees = @()
 
-                # We are resolving group members (i.e. expanding groups).
-                $true {
-                    Write-Verbose -Message "[function: getTrustee][Mailbox: $($mailboxObject.PrimarySmtpAddress)] Searching for and expanding group $($trusteeSid)."
+                        $foundTrusteeGroup = Invoke-Command @icCommon -ScriptBlock {
 
-                    $foundTrusteeGroup = $null
-                    $foundTrustees = @()
+                            Get-Group -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                            Select-Object $Using:trusteeProps
+                        }
 
-                    switch ($getTrusteeUseSid) {
-                        # ugh, this guy again..
+                        # Then get its members.
+                        $foundTrustees += Invoke-Command @icCommon -ScriptBlock {
 
-                        $true {
-                            # Get the current group's details.
-                            $foundTrusteeGroup = Invoke-Command @icCommon -ScriptBlock {
+                            # -ReadFromDomainController allows us to get members from non-universal groups in other domains than the current user's.
+                            Get-Group -Filter {$using:filter} -ReadFromDomainController -ErrorAction:SilentlyContinue |
+                            Select-Object -ExpandProperty Members
+                        }
 
-                                Get-Group -Filter "Sid -eq '$($Using:trusteeSid)' -or SidHistory -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                                Select-Object $Using:trusteeProps
-                            }
+                        # Send the group members back into getTrusteeObject for processing.
+                        $foundTrustees |
+                        Select-Object -Index (0..999) |
+                        ForEach-Object {
 
-                            # Then get its members.
-                            $foundTrustees += Invoke-Command @icCommon -ScriptBlock {
+                            # We define this here so we don't lose it with $_ when we enter the $folder switch.  $_.SecurityIdentifierString was another option, but isn't always available, while ObjectGuid seems to be available in all Exchange (2010 +).
+                            $trusteeGroupMemberSid = $_.ObjectGuid.Guid
 
-                                # -ReadFromDomainController allows us to get members from non-universal groups in other domains than the current user's.
-                                Get-Group -Filter "Sid -eq '$($Using:trusteeSid)' -or SidHistory -eq '$($Using:trusteeSid)'" -ReadFromDomainController -ErrorAction:SilentlyContinue |
-                                Select-Object -ExpandProperty Members
+                            switch ($folder) {
+                                $true {
+                                    getTrusteeObject -trusteeSid $trusteeGroupMemberSid -mailboxObject $mailboxObject -accessRights $accessRights -folder -folderName $folderName -expandGroups:$true
+                                }
+                                $false {
+                                    getTrusteeObject -trusteeSid $trusteeGroupMemberSid -mailboxObject $mailboxObject -accessRights $accessRights -expandGroups:$true
+                                }
                             }
                         }
 
-                        $false {
-                            # Same thing, get the current group's details.
-                            $foundTrusteeGroup = Invoke-Command @icCommon -ScriptBlock {
+                        Write-Verbose -Message "[function: getTrusteeObject][Mailbox: $($mailboxObject.PrimarySmtpAddress)] Expanded group $($trusteeSid)."
 
-                                Get-Group -Filter "Guid -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                                Select-Object $Using:trusteeProps
-                            }
+                        if ($null -ne $foundTrusteeGroup) { $trusteeGroupExpansionComplete = $true }
+                    } # end $expandGroups -eq $true
 
-                            # Then get its members.
-                            $foundTrustees += Invoke-Command @icCommon -ScriptBlock {
+                    # We aren't expanding groups, so just search and return trustee group (if found).
+                    $false {
+                        $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
 
-                                # -ReadFromDomainController allows us to get members from non-universal groups in other domains than the current user's.
-                                Get-Group -Filter "Guid -eq '$($Using:trusteeSid)'" -ReadFromDomainController -ErrorAction:SilentlyContinue |
-                                Select-Object -ExpandProperty Members
-                            }
+                            Get-Group -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                            Select-Object $Using:trusteeProps
                         }
-                    } # end switch ($getTrusteeUseSid) (#2)
+                    } # end $expandGroups -eq $false
+                } # end switch ($expandGroups)
+            } # end if ($null -eq $foundTrustee) {}
 
-                    # Send the group members back into getTrustee for processing.
-                    $foundTrustees |
-                    Select-Object -Index (0..999) |
-                    ForEach-Object {
+            # If trustee was not found (or returned multiple matches), make note of this in the TrusteeGuid property.
+            if (($null -eq $foundTrustee) -or ($foundTrustee.Count -gt 1)) {
 
-                        # We define this here so we don't lose it with $_ when we enter the $folder switch.  $_.SecurityIdentifierString was another option, but isn't always available, while ObjectGuid seems to be available in all Exchange (2010 +).
-                        $trusteeGroupMemberSid = $_.ObjectGuid.Guid
+                # But first, if it was a group that was expanded, report so in the TrusteeType property, and return the trustee group object.
+                if ($trusteeGroupExpansionComplete -eq $true) {
 
-                        switch ($folder) {
-                            $true {
-                                getTrustee -trusteeSid $trusteeGroupMemberSid -mailboxObject $mailboxObject -accessRights $accessRights -folder -folderName $folderName -expandGroups:$true
-                            }
-                            $false {
-                                getTrustee -trusteeSid $trusteeGroupMemberSid -mailboxObject $mailboxObject -accessRights $accessRights -expandGroups:$true
-                            }
-                        }
+                    $trusteeObject |
+                    Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $foundTrusteeGroup.Guid -PassThru |
+                    Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue "EXPANDED:$($foundTrusteeGroup.RecipientTypeDetails.Value)" -PassThru |
+                    Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $foundTrusteeGroup.WindowsEmailAddress
+
+                    if ([string]::IsNullOrEmpty($foundTrusteeGroup.DisplayName)) {
+
+                        $trusteeObject | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.Name
                     }
+                    else { $trusteeObject | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.DisplayName }
 
-                    Write-Verbose -Message "[function: getTrustee][Mailbox: $($mailboxObject.PrimarySmtpAddress)] Expanded group $($trusteeSid)."
-
-                    if ($null -ne $foundTrusteeGroup) { $trusteeGroupExpansionComplete = $true }
-                } # end $expandGroups -eq $true
-
-                # We aren't expanding groups, so just search and return trustee group (if found).
-                $false {
-                    switch ($getTrusteeUseSid) {
-                        # one last time...
-
-                        $true {
-                            $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-Group -Filter "Sid -eq '$($Using:trusteeSid)' -or SidHistory -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                                Select-Object $Using:trusteeProps
-                            }
-                        }
-
-                        $false {
-                            $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
-
-                                Get-Group -Filter "Guid -eq '$($Using:trusteeSid)'" -ErrorAction:SilentlyContinue |
-                                Select-Object $Using:trusteeProps
-                            }
-                        }
-                    } # end switch ($getTrusteeUseSid) (#3)
-                } # end $expandGroups -eq $false
-            } # end switch ($expandGroups)
-        } # end if ($null -eq $foundTrustee) {}
-
-        # If trustee was not found (or returned multiple matches), make note of this in the TrusteeGuid property.
-        if (($null -eq $foundTrustee) -or ($foundTrustee.Count -gt 1)) {
-
-            # But first, if it was a group that was expanded, report so in the TrusteeType property, and return the trustee group object.
-            if ($trusteeGroupExpansionComplete -eq $true) {
-
-                $trusteeReturned |
-                Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $foundTrusteeGroup.Guid -PassThru |
-                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue "EXPANDED:$($foundTrusteeGroup.RecipientTypeDetails.Value)" -PassThru |
-                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $foundTrusteeGroup.WindowsEmailAddress
-
-                if ([string]::IsNullOrEmpty($foundTrusteeGroup.DisplayName)) {
-
-                    $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.Name
                 }
-                else { $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrusteeGroup.DisplayName }
-
+                else {
+                    $trusteeObject |
+                    Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue "Not found or ambiguous ($($trusteeSid))" -PassThru |
+                    Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue '' -PassThru |
+                    Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue '' -PassThru |
+                    Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue ''
+                }
             }
+            # Otherwise add the successfully found trustee's pertinent properties.
             else {
-                $trusteeReturned |
-                Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue "Not found or ambiguous ($($trusteeSid))" -PassThru |
-                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue '' -PassThru |
-                Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue '' -PassThru |
-                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue ''
+                $trusteeObject |
+                Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $foundTrustee.Guid -PassThru |
+                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $foundTrustee.RecipientTypeDetails -PassThru |
+                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $foundTrustee.WindowsEmailAddress
+
+                if ([string]::IsNullOrEmpty($foundTrustee.DisplayName)) {
+
+                    $trusteeObject | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.Name
+                }
+                else { $trusteeObject | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.DisplayName }
             }
-        }
-        # Otherwise add the successfully found trustee's pertinent properties.
+
+            # Save user trustees (skip group trustees) into $trusteeTracker:
+            if (-not ($trusteeObject -match '(Group)')) {
+
+                $trusteeTracker[$trusteeSid] = @{
+
+                    TrusteeDisplayName = $trusteeObject.TrusteeDisplayName
+                    TrusteePSmtp       = $trusteeObject.TrusteePSmtp
+                    TrusteeType        = $trusteeObject.TrusteeType
+                    TrusteeGuid        = $trusteeObject.Guid
+                }
+            }
+
+        } # end if (-not $trusteeTracker[$trusteeSid]) {}
         else {
-            $trusteeReturned |
-            Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $foundTrustee.Guid -PassThru |
-            Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $foundTrustee.RecipientTypeDetails -PassThru |
-            Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $foundTrustee.WindowsEmailAddress
-
-            if ([string]::IsNullOrEmpty($foundTrustee.DisplayName)) {
-
-                $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.Name
-            }
-            else { $trusteeReturned | Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $foundTrustee.DisplayName }
+            # This trustee was previously seen, reusing the info (for performance-savings):
+            $trusteeObject |
+                Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeGuid -PassThru |
+                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeType -PassThru |
+                Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeDisplayName -PassThru |
+                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteePSmtp
         }
 
         # Finally, return the finished product.
-        $trusteeReturned |
-        Select-Object -Property * -ExcludeProperty GrantSendOnBehalfTo, PS*ComputerName, RunspaceId
+        $trusteeObject |
+        Select-Object -Property DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid,
+        TrusteeDisplayName, TrusteePSmtp, TrusteeType, TrusteeGuid
 
-    } # end function getTrustee
+    } # end function getTrusteeObject
 
     # Fire up the engines.  Brap brap...
     $MailboxProcessedCounter = 0
@@ -594,22 +570,14 @@ process {
                     Select-Object -Index (0..999) |
                     ForEach-Object {
 
-                        if ($trusteeTracker.Keys -notcontains $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value) {
+                        $getTrusteeObjectProps = @{
 
-                            $_thisTrustee = $null
-
-                            $getTrusteeProps = @{
-                                trusteeSid    = $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value
-                                mailboxObject = $Mailbox
-                                accessRights  = 'FullAccess'
-                                expandGroup   = $ExpandTrusteeGroups
-                            }
-
-                            $_thisTrustee = getTrustee @getTrusteeProps
-                            $_thisTrustee
-                            $trusteeTracker[$faTrustees[$($faIndexCounter)].SecurityIdentifier.Value] = $_thisTrustee
+                            trusteeSid    = $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value
+                            mailboxObject = $Mailbox
+                            accessRights  = 'FullAccess'
+                            expandGroup   = $ExpandTrusteeGroups
                         }
-                        else { $trusteeTracker[$faTrustees[$($faIndexCounter)].SecurityIdentifier.Value] }
+                        getTrusteeObject @getTrusteeObjectProps
                     }
                 } # end $LegacyExchange -eq $true
 
@@ -641,22 +609,14 @@ process {
                     Select-Object -Index (0..999) |
                     ForEach-Object {
 
-                        if ($trusteeTracker.Keys -notcontains $_.SecurityIdentifier) {
+                        $getTrusteeObjectProps = @{
 
-                            $_thisTrustee = $null
-
-                            $getTrusteeProps = @{
-                                trusteeSid    = $_.SecurityIdentifier
-                                mailboxObject = $Mailbox
-                                accessRights  = 'FullAccess'
-                                expandGroup   = $ExpandTrusteeGroups
-                            }
-
-                            $_thisTrustee = getTrustee @getTrusteeProps
-                            $_thisTrustee
-                            $trusteeTracker[$_.SecurityIdentifier] = $_thisTrustee
+                            trusteeSid    = $_.SecurityIdentifier
+                            mailboxObject = $Mailbox
+                            accessRights  = 'FullAccess'
+                            expandGroup   = $ExpandTrusteeGroups
                         }
-                        else { $trusteeTracker[$_.SecurityIdentifier] }
+                        getTrusteeObject @getTrusteeObjectProps
                     }
                 } # end $LegacyExchange -eq $false
             } # end switch ($LegacyExchange)
@@ -721,22 +681,14 @@ process {
                     Select-Object -Index (0..999) |
                     ForEach-Object {
 
-                        if ($trusteeTracker.Keys -notcontains $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value) {
+                        $getTrusteeObjectProps = @{
 
-                            $_thisTrustee = $null
-
-                            $getTrusteeProps = @{
-                                trusteeSid    = $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value
-                                mailboxObject = $Mailbox
-                                accessRights  = 'SendAs'
-                                expandGroup   = $ExpandTrusteeGroups
-                            }
-
-                            $_thisTrustee = getTrustee @getTrusteeProps
-                            $_thisTrustee
-                            $trusteeTracker[$saTrustees[$($saIndexCounter)].SecurityIdentifier.Value] = $_thisTrustee
+                            trusteeSid    = $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value
+                            mailboxObject = $Mailbox
+                            accessRights  = 'SendAs'
+                            expandGroup   = $ExpandTrusteeGroups
                         }
-                        else { $trusteeTracker[$saTrustees[$($saIndexCounter)].SecurityIdentifier.Value] }
+                        getTrusteeObject @getTrusteeObjectProps
                     }
                 } # end switch ($LegacyExchange) { $true {*} }
 
@@ -767,22 +719,14 @@ process {
                     Select-Object -Index (0..999) |
                     ForEach-Object {
 
-                        if ($trusteeTracker.Keys -notcontains $_.SecurityIdentifier) {
+                        $getTrusteeObjectProps = @{
 
-                            $_thisTrustee = $null
-
-                            $getTrusteeProps = @{
-                                trusteeSid    = $_.SecurityIdentifier
-                                mailboxObject = $Mailbox
-                                accessRights  = 'SendAs'
-                                expandGroup   = $ExpandTrusteeGroups
-                            }
-
-                            $_thisTrustee = getTrustee @getTrusteeProps
-                            $_thisTrustee
-                            $trusteeTracker[$_.SecurityIdentifier] = $_thisTrustee
+                            trusteeSid    = $_.SecurityIdentifier
+                            mailboxObject = $Mailbox
+                            accessRights  = 'SendAs'
+                            expandGroup   = $ExpandTrusteeGroups
                         }
-                        else { $trusteeTracker[$_.SecurityIdentifier] }
+                        getTrusteeObject @getTrusteeObjectProps
                     }
                 }  # end switch ($LegacyExchange) { $false {*} }
             } # end switch ($LegacyExchange) {*}
@@ -818,7 +762,7 @@ process {
 
                     if (-not ([string]::IsNullOrEmpty($_.ObjectGuid.Guid))) {
 
-                        getTrustee -trusteeSid $_.ObjectGuid.Guid -mailboxObject $Mailbox -accessRights 'SendOnBehalf' -expandGroups $ExpandTrusteeGroups
+                        getTrusteeObject -trusteeSid $_.ObjectGuid.Guid -mailboxObject $Mailbox -accessRights 'SendOnBehalf' -expandGroups $ExpandTrusteeGroups
                     }
                 } # sobTrustees | ForEach-Object {}
             } # end if ($Mailbox.GrantSendOnBehalfTo.Count -ge 1) {}
@@ -904,26 +848,17 @@ process {
 
                             if (-not ([string]::IsNullOrEmpty("$($fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid)"))) {
 
-                                if ($trusteeTracker.Keys -notcontains $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid) {
+                                $getTrusteeObjectProps = @{
 
-                                    $_thisTrustee = $null
-
-                                    $getTrusteeProps = @{
-                                        trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
-                                        mailboxObject = $Mailbox
-                                        accessRights  = $_.AccessRights -join ';'
-                                        folder        = $true
-                                        folderName    = $Folder
-                                        expandGroup   = $ExpandTrusteeGroups
-                                    }
-
-                                    $_thisTrustee = getTrustee @getTrusteeProps
-                                    $_thisTrustee
-                                    $trusteeTracker[$fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid] = $_thisTrustee
+                                    trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
+                                    mailboxObject = $Mailbox
+                                    accessRights  = $_.AccessRights -join ';'
+                                    folder        = $true
+                                    folderName    = $Folder
+                                    expandGroup   = $ExpandTrusteeGroups
                                 }
-                                else { $trusteeTracker[$fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid] }
+                                getTrusteeObject @getTrusteeObjectProps
                             }
-
                         } # end $PertinentFolderPermissions | ForEach-Object {}
                     } # end $LegacyExchange -eq $true
 
@@ -959,24 +894,16 @@ process {
 
                             if (-not ([string]::IsNullOrEmpty("$($_.ADRecipient.Sid)"))) {
 
-                                if ($trusteeTracker.Keys -notcontains $_.ADRecipient.Sid) {
+                                $getTrusteeObjectProps = @{
 
-                                    $_thisTrustee = $null
-
-                                    $getTrusteeProps = @{
-                                        trusteeSid    = $_.ADRecipient.Sid
-                                        mailboxObject = $Mailbox
-                                        accessRights  = $_.AccessRights -join ';'
-                                        folder        = $true
-                                        folderName    = $Folder
-                                        expandGroup   = $ExpandTrusteeGroups
-                                    }
-
-                                    $_thisTrustee = getTrustee @getTrusteeProps
-                                    $_thisTrustee
-                                    $trusteeTracker[$_.ADRecipient.Sid] = $_thisTrustee
+                                    trusteeSid    = $_.ADRecipient.Sid
+                                    mailboxObject = $Mailbox
+                                    accessRights  = $_.AccessRights -join ';'
+                                    folder        = $true
+                                    folderName    = $Folder
+                                    expandGroup   = $ExpandTrusteeGroups
                                 }
-                                else { $trusteeTracker[$_.ADRecipient.Sid] }
+                                getTrusteeObject @getTrusteeObjectProps
                             }
                         } # end $PertientFolderPermissions | ForEach-Object {}
                     } # end $LegacyExchange -eq $false
