@@ -301,11 +301,11 @@ begin {
 
                 $filter = "Sid -eq '$($trusteeSid)' -or SidHistory -eq '$($trusteeSid)'"
             }
-            else { $filter = "Guid -eq '$($trusteeSid)" }
+            else { $filter = "Guid -eq '$($trusteeSid)'" }
 
             $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
 
-                Get-User -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                Get-User -Filter $using:filter -ErrorAction:SilentlyContinue |
                 Select-Object $Using:trusteeProps
             }
 
@@ -324,7 +324,7 @@ begin {
 
                         $foundTrusteeGroup = Invoke-Command @icCommon -ScriptBlock {
 
-                            Get-Group -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                            Get-Group -Filter $using:filter -ErrorAction:SilentlyContinue |
                             Select-Object $Using:trusteeProps
                         }
 
@@ -332,7 +332,7 @@ begin {
                         $foundTrustees += Invoke-Command @icCommon -ScriptBlock {
 
                             # -ReadFromDomainController allows us to get members from non-universal groups in other domains than the current user's.
-                            Get-Group -Filter {$using:filter} -ReadFromDomainController -ErrorAction:SilentlyContinue |
+                            Get-Group -Filter $using:filter -ReadFromDomainController -ErrorAction:SilentlyContinue |
                             Select-Object -ExpandProperty Members
                         }
 
@@ -363,7 +363,7 @@ begin {
                     $false {
                         $foundTrustee = Invoke-Command @icCommon -ScriptBlock {
 
-                            Get-Group -Filter {$using:filter} -ErrorAction:SilentlyContinue |
+                            Get-Group -Filter $using:filter -ErrorAction:SilentlyContinue |
                             Select-Object $Using:trusteeProps
                         }
                     } # end $expandGroups -eq $false
@@ -418,7 +418,7 @@ begin {
                     TrusteeDisplayName = $trusteeObject.TrusteeDisplayName
                     TrusteePSmtp       = $trusteeObject.TrusteePSmtp
                     TrusteeType        = $trusteeObject.TrusteeType
-                    TrusteeGuid        = $trusteeObject.Guid
+                    TrusteeGuid        = $trusteeObject.TrusteeGuid
                 }
             }
 
@@ -426,15 +426,16 @@ begin {
         else {
             # This trustee was previously seen, reusing the info (for performance-savings):
             $trusteeObject |
-                Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeGuid -PassThru |
-                Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeType -PassThru |
-                Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeDisplayName -PassThru |
-                Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteePSmtp
+            Add-Member -NotePropertyName 'TrusteeGuid' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeGuid -PassThru |
+            Add-Member -NotePropertyName 'TrusteeType' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeType -PassThru |
+            Add-Member -NotePropertyName 'TrusteeDisplayName' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteeDisplayName -PassThru |
+            Add-Member -NotePropertyName 'TrusteePSmtp' -NotePropertyValue $trusteeTracker[$trusteeSid].TrusteePSmtp
         }
 
         # Finally, return the finished product.
         $trusteeObject |
         Select-Object -Property DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid,
+        PermissionType, AccessRights,
         TrusteeDisplayName, TrusteePSmtp, TrusteeType, TrusteeGuid
 
     } # end function getTrusteeObject
@@ -442,42 +443,42 @@ begin {
     # Fire up the engines.  Brap brap...
     $MailboxProcessedCounter = 0
     $MainProgress = @{
-        Activity         = "Get-MailboxTrustee.ps1 - Start time: $($StartTime.DateTime)"
-        Status           = "Mailboxes processed: $($MailboxProcessedCounter) ; Time elapsed $($StopWatch.Elapsed -replace '\..*')"
-        Id               = 0
-        ParentId         = -1
+        Activity        = "Get-MailboxTrustee.ps1 - Start time: $($StartTime.DateTime)"
+        Status          = "Mailboxes processed: $($MailboxProcessedCounter) ; Time elapsed $($StopWatch.Elapsed -replace '\..*')"
+        Id              = 0
+        ParentId        = -1
         PercentComplete = -1
     }
     Write-Progress @MainProgress
 
     $faProgressProps = @{
-        Activity         = 'FullAccess'
-        Id               = 1
-        ParentId         = 0
+        Activity        = 'FullAccess'
+        Id              = 1
+        ParentId        = 0
         PercentComplete = -1
     }
     Write-Progress @faProgressProps -Status 'Ready'
 
     $saProgressProps = @{
-        Activity         = 'Send-As'
-        Id               = 2
-        ParentId         = 0
+        Activity        = 'Send-As'
+        Id              = 2
+        ParentId        = 0
         PercentComplete = -1
     }
     Write-Progress @saProgressProps -Status 'Ready'
 
     $sobProgressProps = @{
-        Activity         = 'Send on Behalf'
-        Id               = 3
-        ParentId         = 0
+        Activity        = 'Send on Behalf'
+        Id              = 3
+        ParentId        = 0
         PercentComplete = -1
     }
     Write-Progress @sobProgressProps -Status 'Ready'
 
     $fpProgressProps = @{
-        Activity         = 'Folder Permissions'
-        Id               = 4
-        ParentId         = 0
+        Activity        = 'Folder Permissions'
+        Id              = 4
+        ParentId        = 0
         PercentComplete = -1
     }
     Write-Progress @fpProgressProps -Status 'Ready'
@@ -780,6 +781,7 @@ process {
 
             # List mailbox folders as an array and send them down the pipeline.
             $Folders = @(
+
                 'Mailbox root',
                 'Inbox',
                 'Calendar',
