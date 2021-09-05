@@ -288,9 +288,7 @@ begin {
                         }
 
                         # Send the group members back into getTrusteeObject for processing.
-                        $foundTrustees |
-                        Select-Object -Index (0..999) |
-                        ForEach-Object {
+                        $foundTrustees | ForEach-Object {
 
                             # We define this here so we don't lose it with $_ when we enter the $folder switch.  $_.SecurityIdentifierString was another option, but isn't always available, while ObjectGuid seems to be available in all Exchange (2010 +).
                             $trusteeGroupMemberSid = $_.ObjectGuid.Guid
@@ -630,6 +628,8 @@ process {
                         Select-Object -ExpandProperty User |
                         Select-Object -Property SecurityIdentifier
                     }
+                    $FullAccess = $faTrustees
+
                 } # end $LegacyExchange -eq $true
 
                 $false {
@@ -662,7 +662,7 @@ process {
 
                     $getTrusteeObjectProps = @{
 
-                        trusteeSid    = $faTrustees[$($faIndexCounter)].SecurityIdentifier.Value
+                        trusteeSid    = $_.SecurityIdentifier.ToString()
                         mailboxObject = $Mailbox
                         accessRights  = 'FullAccess'
                         expandGroup   = $ExpandTrusteeGroups
@@ -721,6 +721,8 @@ process {
                         Select-Object -ExpandProperty User |
                         Select-Object -Property SecurityIdentifier
                     }
+                    $SendAs = $saTrustees
+
                 } # end switch ($LegacyExchange) { $true {*} }
 
                 $false {
@@ -752,7 +754,7 @@ process {
 
                     $getTrusteeObjectProps = @{
 
-                        trusteeSid    = $saTrustees[$($saIndexCounter)].SecurityIdentifier.Value
+                        trusteeSid    = $_.SecurityIdentifier.ToString()
                         mailboxObject = $Mailbox
                         accessRights  = 'SendAs'
                         expandGroup   = $ExpandTrusteeGroups
@@ -862,6 +864,27 @@ process {
 
                         } @icCommon -ArgumentList $mGuid, "$($Folder -replace 'Mailbox root','')", $pfpIndex
 
+                        writeLog @writeLogParams -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] Processing $($PertinentFolderPermissions.Count) trustees."
+                        Write-Progress @fpProgressProps -Status "Resolving $($Folder) trustees with Get-User/Get-Group"
+
+                        $pfpIndexCounter = 0
+                        $PertinentFolderPermissions | ForEach-Object {
+
+                            if (-not ([string]::IsNullOrEmpty("$($fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid)"))) {
+
+                                $getTrusteeObjectProps = @{
+
+                                    trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
+                                    mailboxObject = $Mailbox
+                                    accessRights  = $_.AccessRights -join ';'
+                                    folder        = $true
+                                    folderName    = $Folder
+                                    expandGroup   = $ExpandTrusteeGroups
+                                }
+                                getTrusteeObject @getTrusteeObjectProps
+                            }
+                            $pfpIndexCounter++
+                        }
                     } # end $LegacyExchange -eq $true
                     $false {
                         $FolderPermissions = @()
@@ -883,35 +906,34 @@ process {
                             ($_.AccessRights -like '*None*') -and -not
                             ($_.AccessRights -like '*AvailabilityOnly*')
                         }
+
+                        writeLog @writeLogParams -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] Processing $($PertinentFolderPermissions.Count) trustees."
+                        Write-Progress @fpProgressProps -Status "Resolving $($Folder) trustees with Get-User/Get-Group"
+
+                        $PertinentFolderPermissions | ForEach-Object {
+
+                            if (-not ([string]::IsNullOrEmpty("$($_.ADRecipient.Sid)"))) {
+
+                                $getTrusteeObjectProps = @{
+
+                                    trusteeSid    = $_.ADRecipient.Sid
+                                    mailboxObject = $Mailbox
+                                    accessRights  = $_.AccessRights -join ';'
+                                    folder        = $true
+                                    folderName    = $Folder
+                                    expandGroup   = $ExpandTrusteeGroups
+                                }
+                                getTrusteeObject @getTrusteeObjectProps
+                            }
+                        }
                     } # end $LegacyExchange -eq $false
                 } # end switch ($LegacyExchange)
 
+                if ($PertinentFolderPermissions.Count -lt 1) {
 
-                if ($PertinentFolderPermissions.Count -ge 1) {
-
-                    writeLog @writeLogParams -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] Found $($PertinentFolderPermissions.Count) trustees."
-                    Write-Progress @fpProgressProps -Status "Resolving $($Folder) trustees with Get-User/Get-Group"
-
-                    $PertinentFolderPermissions | ForEach-Object {
-
-                        if (-not ([string]::IsNullOrEmpty("$($fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid)"))) {
-
-                            $getTrusteeObjectProps = @{
-
-                                trusteeSid    = $fpTrustees[$($pfpIndexCounter)].ADRecipient.Sid
-                                mailboxObject = $Mailbox
-                                accessRights  = $_.AccessRights -join ';'
-                                folder        = $true
-                                folderName    = $Folder
-                                expandGroup   = $ExpandTrusteeGroups
-                            }
-                            getTrusteeObject @getTrusteeObjectProps
-                        }
-                    }
+                    writeLog @writeLogParams -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] No trustees."
                 }
-                else { writeLog @writeLogParams -Message "[Mailbox: $($mPSmtp)][Folder: $($Folder)] No trustees." }
-            } # end $Folders | ForEach-Object {}
-
+            }
             Write-Progress @fpProgressProps -Status 'Ready'
         }
 
@@ -933,6 +955,7 @@ process {
 
     # Other problems go here, and do not terminate the script, just this mailbox:
     catch {
+        Write-Debug 'STop'
         'Non-script-ending error encountered.' | writeLog @writeLogParams -ErrorRecord $_ -PassThru | Write-Warning
         Write-Error $_
         "Mailboxes processed: $($MailboxProcessedCounter)" | Write-Warning
