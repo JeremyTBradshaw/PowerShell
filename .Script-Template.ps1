@@ -40,9 +40,9 @@ param(
     [switch]$DevMode
 )
 
-########-----------#
+#======#-----------#
 #region# Functions #
-########-----------#
+#======#-----------#
 <#
     Functions region goes before Intialization & Variables region so that writeLog function can be available ASAP.
 #>
@@ -53,7 +53,7 @@ function writeLog {
         [Parameter(Mandatory)][datetime]$LogDateTime,
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][string]$Message,
-        [ErrorRecord]$ErrorRecord,
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
         [switch]$DisableLogging,
         [switch]$PassThru
     )
@@ -86,24 +86,23 @@ function writeLog {
                 "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
                 Out-File -FilePath $LogFile -Append -ErrorAction Stop
             }
-
-            if ($PassThru) { $Message }
-            else { Write-Verbose -Message $Message }
         }
         catch { throw }
     }
+
+    if ($PassThru) { $Message }
     else { Write-Verbose -Message $Message }
 }
 
-###########-----------#
+#=========#-----------#
 #endregion# Functions #
-###########-----------#
+#=========#-----------#
 
 try {
 
-    ########----------------------------#
+    #======#----------------------------#
     #region# Initialization & Variables #
-    ########----------------------------#
+    #======#----------------------------#
 
     # 1. writeLog splat and test writeLog:
     $Script:dtNow = [datetime]::Now
@@ -128,39 +127,39 @@ try {
         throw
     }
 
-    ###########----------------------------#
+    #=========#----------------------------#
     #endregion# Initialization & Variables #
-    ###########----------------------------#
+    #=========#----------------------------#
 
 
 
-    ########----------------#
+    #======#----------------#
     #region# Data Retrieval #
-    ########----------------#
+    #======#----------------#
 
-    ###########----------------#
+    #=========#----------------#
     #endregion# Data Retrieval #
-    ###########----------------#
+    #=========#----------------#
 
 
 
-    ########------------#
+    #======#------------#
     #region# Processing #
-    ########------------#
+    #======#------------#
 
-    ###########------------#
+    #=========#------------#
     #endregion# Processing #
-    ###########------------#
+    #=========#------------#
 
 
 
-    ########---------------------#
+    #======#---------------------#
     #region# Reporting & Wrap-Up #
-    ########---------------------#
+    #======#---------------------#
 
-    ###########---------------------#
+    #=========#---------------------#
     #endregion# Reporting & Wrap-Up #
-    ###########---------------------#
+    #=========#---------------------#
 
 }
 catch {

@@ -38,11 +38,10 @@ function writeLog {
                 "`t+ FullyQualifiedErrorId: $($ErrorRecord.FullyQualifiedErrorId)`r`n" |
                 Out-File -FilePath $LogFile -Append -ErrorAction Stop
             }
-
-            if ($PassThru) { $Message }
-            else { Write-Verbose -Message $Message }
         }
         catch { throw }
     }
+
+    if ($PassThru) { $Message }
     else { Write-Verbose -Message $Message }
 }
