@@ -1,10 +1,14 @@
-$ExchangeServerBuildNumbers = @{
+<#
+    .Synopsis
+    Exchange Server Build Numbers.
 
-    <#
-        I've purposely indexed the product name instead of the short or long build numbers.
-        The reason for this is that when PS remoting, Exchange 2010 reports the long format while 2013 and newer report the short format.
-    #>
-
+    .Notes
+    I've purposely indexed the product name instead of the short or long build numbers. The reason for this is that
+    when PS remoting, Exchange 2010 reports the long format while 2013 and newer report the short format.  Scripts
+    importing this PSD1 can enumerate the corresponding values according to whether the server being checked is 2010
+    or 2013 and newer.
+#>
+@{
     #Region 2019
 
     'Exchange Server 2019 CU5'                                   = @{

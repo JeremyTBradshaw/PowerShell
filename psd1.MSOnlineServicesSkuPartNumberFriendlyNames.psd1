@@ -1,4 +1,8 @@
 <#
+    .Synopsis
+    SkuPartNumber friendly names
+
+    .Notes
     Source (link valid on 2020-05-15, but Excel workbook has last modified date: 2020-03-30):
     https://go.microsoft.com/fwlink/p/?linkid=834456
 
@@ -6,14 +10,12 @@
     duplicates (based on Provisioning ID) removed.
 
     **Some manually sourced data is stored separatedly/commented at the end.
-    
+
     Additional reference (link valid on 2020-05-15):
     https://docs.microsoft.com/en-us/azure/active-directory/users-groups-roles/licensing-service-plan-reference
-#>    
-
-$SkuPartNumberFriendlyNames = @{
-
-    # Provisioning ID                                     = Offer Display Name
+#>
+@{
+    # Provisioning ID (a.k.a. SkuPartNumber)              = Offer Display Name
     'AAD_BASIC_FACULTY'                                   = 'Azure Active Directory Basic for Faculty'
     'AAD_BASIC_STUDENT'                                   = 'Azure Active Directory Basic for Students'
     'AAD_PREMIUM'                                         = 'Azure Active Directory Premium P1'
