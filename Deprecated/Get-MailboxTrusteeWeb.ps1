@@ -1,7 +1,5 @@
 <#
-
     .Synopsis
-
     Identify webs of mailbox-trustee relationships, in the following manner:
 
     1.) Reverse Lookup: Find all mailboxes that one or more trustee users have
@@ -13,9 +11,7 @@
     3.) Recursively repeat this process against all found mailboxes and trustees
         until the entire web is known (or set a maximum recursion depth).
 
-
     .Description
-
     This is the 2nd of 2 brother scripts to Get-MailboxTrustee.ps1.  Therefore it
     requires that the passed CSV file(s) contain(s) a few headers for matching
     properties output by Get-MailboxTrustee.ps1.  Any other headers (i.e. columns)
@@ -26,18 +22,14 @@
 
     Mandatory CSV headers:
 
-    - PrimarySmtpAddress
-    - RecipientTypeDetails*
+    - MailboxPSmtp
+    - MailboxType
     - PermissionType
     - AccessRights
     - TrusteePSmtp
-    - TrusteeType*
-
-    * = future implementions will harness these.
-
+    - TrusteeType
 
     .Parameter GetMailboxTrusteeCsvFilePath
-
     The full or direct path to the CSV file(s) containing objects that have been
     output from Get-MailboxTrustee.ps1.  **Note: Get-MailboxTrustee.ps1's
     MinimizedOutput mode is not support (see description).
@@ -50,9 +42,7 @@
        on-premises.
      - Get-MailboxTrustee.ps1 was run in multiple jobs or runspaces.
 
-
     .Parameter StartingPSmtp
-
     Specify one or more mailboxes and/or trustees to search recursively as described
     in the synopsis.  Include all SMTP addresses that are intended to be in the same
     web (think 'web' = 'migration batch').
@@ -63,9 +53,7 @@
     own (i.e. no email address), they will not be impacted by being left out of
     this exercise, since they themselves will not need to be migrated.
 
-
     .Parameter PermissiveMailboxThreshold
-
     Some mailboxes have very many trustees.  Examples are popular room and equipment
     mailboxes.  This can plague the process of identifying webs that are truly
     significant.  Use this parameter to specify the maximum # of 1 to 1
@@ -75,9 +63,7 @@
     - Minimum: 1
     - Maximum: Positive [Int32]
 
-
     .Parameter PowerTrusteeThreshold
-
     Some users have access to very many mailboxes.  Examples are administrators and
     Power Users.  Use this parameter to specify the maximum # of 1 to 1
     relationships trustees can have before they will be excluded from the web.
@@ -86,9 +72,7 @@
     - Minimum: 1
     - Maximum: Positive [Int32]
 
-
     .Parameter MaximumDepth
-
     How many times to recurse when performing the forward and reverse trustee
     lookups.  This can help if the full web of permission relationships is a larger
     group of mailboxes than desired for the task at hand, for example, a migration
@@ -98,23 +82,17 @@
     - Minimum: 1
     - Maximum: Positive [Int32]
 
-
     .Parameter IgnoreMailboxPSmtp
-
     One or more mailboxes to ommit from searches and output.  Expected input is
     PrimarySmtpAddress (of the mailbox (i.e. trust'ING user)), comma-separated or
     an array variable if supplying multiple.
 
-
     .Parameter IgnoreTrusteePSmtp
-
     One or more trustee users to ommit from searches and output. Expected input is
     PrimarySmtpAddress (of the trustee (i.e. trust'ED user), comma-separated or an
     array variable if supplying multiple.
 
-
     .Parameter IgnorePermissionType
-
     One or more of the following permissions types to ommit from searches and
     output:
 
@@ -129,9 +107,7 @@
     - Tasks
     - SentItems
 
-
     .Example
-
     .\Get-MailboxTrusteeWeb.ps1 -GetMailboxTrusteeCsvFilePath .\Desktop\All-Mailbox-Trustees-2018-10-17 `
                                     -PermissiveMailboxThreshold 30 `
                                     -PowerTrusteeThreshold 10 `
@@ -142,7 +118,6 @@
 
 
     .Example
-
     $AllMailboxes = Get-Mailboxes -ResultSize:Unlimited
 
     PS C:\> $AllMailboxes | .\Get-MailboxTrustee.ps1 -ExpandTrusteeGroups | Export-Csv .\All-Mailbox-Trustees.csv -NTI
@@ -163,15 +138,11 @@
 
     PS C:\> $MigBatch1UsersWeb | Export-Csv .\MigBatchUsers1_MailboxTrusteeWeb.csv -NTI
 
-
     .Link
-
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrusteeWeb.ps1
     # ^ Get-MailboxTrusteeWeb.ps1
 
-
     .Link
-
     # Get-MailoxTrusteeWebSQLEdition.ps1
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrusteeWebSQLEdition.ps1
 
@@ -183,15 +154,11 @@
 
     # New-MailboxTrusteeReverseLookup.ps1
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/New-MailboxTrusteeReverseLookup.ps1
-
 #>
 
 #Requires -Version 3
-
 [CmdletBinding()]
-
 param(
-
     [Parameter(Mandatory = $true)]
     [ValidateScript( {
         $_ | ForEach-Object {
@@ -246,16 +213,12 @@ param(
         'FullAccess', 'SendAs', 'SendOnBehalf',
         'AllFolders', 'MailboxRoot', 'Inbox', 'Calendar', 'Contacts', 'Tasks', 'SentItems'
     )]
-    [string[]]$IgnorePermissionType,
-
-    [switch]$OptimizedInput
+    [string[]]$IgnorePermissionType
 
 )
 
 begin {
-
     $StartTime = Get-Date
-
     $MainProgress = @{
 
         Activity            = "Get-MailboxTrusteeWeb.ps1 (Start time: $($StartTime.DateTime))"
@@ -270,8 +233,8 @@ begin {
 
     $StandardHeaders = @(
 
-        'PrimarySmtpAddress',
-        'RecipientTypeDetails',
+        'MailboxPSmtp',
+        'MailboxType',
         'PermissionType',
         'AccessRights',
         'TrusteePSmtp',
@@ -312,61 +275,52 @@ begin {
         $MailboxTrustees += $CurrentCsv
     }
 
-    switch ($OptimizedInput) {
+    $MainProgress['Status'] = "Processing imported CSV content.  Total CSV data rows: $($MailboxTrustees.Count)."
+    Write-Progress @MainProgress -CurrentOperation "Step 1 of 3: Filtering out ignored mailboxes & trustees"
 
-        $false {
+    $IgnoredPermissionTypes = @()
+    $IgnorePermissionType |
+    ForEach-Object {
+        if ($_ -eq 'AllFolders') {
 
-            $MainProgress['Status'] = "Processing imported CSV content.  Total CSV data rows: $($MailboxTrustees.Count)."
-            Write-Progress @MainProgress -CurrentOperation "Step 1 of 3: Filtering out ignored mailboxes & trustees"
+            $IgnoredPermissionTypes += 'Mailbox root', 'Inbox', 'Calendar', 'Contacts', 'Tasks','Sent Items'
+        }
+        else {
+            $IgnoredPermissionTypes += $_ -replace 'SendAs', 'Send-As' -replace 'SendOnBehalf', 'Send on behalf' -replace 'MailboxRoot','Mailbox root'
+        }
+    }
 
-            $IgnoredPermissionTypes = @()
-            $IgnorePermissionType |
-            ForEach-Object {
-                if ($_ -eq 'AllFolders') {
+    $FilteredMailboxTrustees += $MailboxTrustees |
+    Where-Object {
+        ($_.TrusteeType -notmatch '(Not found)|(Expanded).*') -and
+        ([string]::IsNullOrEmpty($_.TrusteePSmtp) -eq $false) -and
+        ($_.TrusteePSmtp -match '^.*\@.*\..*$') -and
+        ($IgnoreTrusteePSmtp -notcontains $_.TrusteePSmtp) -and
+        ($IgnoreMailboxPSmtp -notcontains $_.MailboxPSmtp) -and
+        ($IgnoredPermissionTypes -notcontains $_.PermissionType) -and
+        ($IgnoredPermissionTypes -notcontains $_.AccessRights)
+    }
 
-                    $IgnoredPermissionTypes += 'Mailbox root', 'Inbox', 'Calendar', 'Contacts', 'Tasks','Sent Items'
-                }
-                else {
-                    $IgnoredPermissionTypes += $_ -replace 'SendAs', 'Send-As' -replace 'SendOnBehalf', 'Send on behalf' -replace 'MailboxRoot','Mailbox root'
-                }
-            }
+    $MainProgress['Status'] = "Processing imported CSV content.  Post-filter CSV data rows: $($FilteredMailboxTrustees.Count)."
+    Write-Progress @MainProgress -CurrentOperation "Step 2 of 3: Grouping mailbox-trustee records into unique 1 to 1 relationships"
 
-            $FilteredMailboxTrustees += $MailboxTrustees |
-                                        Where-Object {
-                                            ($_.TrusteeType -notmatch '(Not found)|(Expanded).*') -and
-                                            ([string]::IsNullOrEmpty($_.TrusteePSmtp) -eq $false) -and
-                                            ($_.TrusteePSmtp -match '^.*\@.*\..*$') -and
-                                            ($IgnoreTrusteePSmtp -notcontains $_.TrusteePSmtp) -and
-                                            ($IgnoreMailboxPSmtp -notcontains $_.PrimarySmtpAddress) -and
-                                            ($IgnoredPermissionTypes -notcontains $_.PermissionType) -and
-                                            ($IgnoredPermissionTypes -notcontains $_.AccessRights)
-                                        }
+    $GroupedRelationships = @()
+    $GroupedRelationships +=    $FilteredMailboxTrustees |
+                                Group-Object -Property  MailboxPSmtp,
+                                                        TrusteePSmtp
 
-            $MainProgress['Status'] = "Processing imported CSV content.  Post-filter CSV data rows: $($FilteredMailboxTrustees.Count)."
-            Write-Progress @MainProgress -CurrentOperation "Step 2 of 3: Grouping mailbox-trustee records into unique 1 to 1 relationships"
+    $MainProgress['Status'] = "Processing imported CSV content.  Unique 1 to 1 relationships: $($GroupedRelationships.Count)"
+    Write-Progress @MainProgress -CurrentOperation "Step 3 of 3: Storing unique relationships for processing"
 
-            $GroupedRelationships = @()
-            $GroupedRelationships +=    $FilteredMailboxTrustees |
-                                        Group-Object -Property  PrimarySmtpAddress,
-                                                                TrusteePSmtp
+    $UniqueRelationships =  @()
+    $UniqueRelationships += $GroupedRelationships |
+                            ForEach-Object {
+                                $_.Group |
+                                Select-Object -Index 0 |
+                                Select-Object -Property MailboxPSmtp,
+                                                        TrusteePSmtp
+                            }
 
-            $MainProgress['Status'] = "Processing imported CSV content.  Unique 1 to 1 relationships: $($GroupedRelationships.Count)"
-            Write-Progress @MainProgress -CurrentOperation "Step 3 of 3: Storing unique relationships for processing"
-
-            $UniqueRelationships =  @()
-            $UniqueRelationships += $GroupedRelationships |
-                                    ForEach-Object {
-                                        $_.Group |
-                                        Select-Object -Index 0 |
-                                        Select-Object -Property PrimarySmtpAddress,
-                                                                TrusteePSmtp
-                                    }
-
-                    }
-
-        $true {$UniqueRelationships = $MailboxTrustees}
-
-    } # end switch ($OptimizedInput) {}
 
     if ($PSBoundParameters.ContainsKey('IgnoreMailboxPSmtp')) {
 
@@ -376,7 +330,7 @@ begin {
         $UniqueRelationships =  $UniqueRelationships |
                                 Where-Object {
                                     ($IgnoreTrusteePSmtp -notcontains $_.TrusteePSmtp) -and
-                                    ($IgnoreMailboxPSmtp -notcontains $_.PrimarySmtpAddress)
+                                    ($IgnoreMailboxPSmtp -notcontains $_.MailboxPSmtp)
                                 }
     }
 
@@ -387,7 +341,7 @@ begin {
         Start-Sleep -Seconds 10
 
         $UniqueRelationships =  $UniqueRelationships |
-                                Group-Object -Property PrimarySmtpAddress |
+                                Group-Object -Property MailboxPSmtp |
                                 Where-Object {$_.Count -le $PermissiveMailboxThreshold} |
                                 Select-Object -ExpandProperty Group
     }
@@ -463,10 +417,10 @@ process {
 
         if ($Web -notcontains $CurrentPSmtp) {
 
-            lookup -Id $CurrentPSmtp -SearchProperty PrimarySmtpAddress |
+            lookup -Id $CurrentPSmtp -SearchProperty MailboxPSmtp |
             ForEach-Object {
                 $Depth1ForwardLookup += [PSCustomObject]@{
-                                            PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                            MailboxPSmtp  = $_.MailboxPSmtp
                                             TrusteePSmtp        = $_.TrusteePSmtp
                                             SourceId            = $CurrentId
                                             SourceType          = 'Mailbox'
@@ -476,7 +430,7 @@ process {
             lookup -Id $CurrentPSmtp -SearchProperty TrusteePSmtp |
             ForEach-Object {
                 $Depth1ReverseLookup += [PSCustomObject]@{
-                                            PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                            MailboxPSmtp  = $_.MailboxPSmtp
                                             TrusteePSmtp        = $_.TrusteePSmtp
                                             SourceId            = $CurrentId
                                             SourceType          = 'Trustee'
@@ -528,7 +482,7 @@ process {
 
                     $CurrentFLItem = $_
 
-                    lookup -Id $_.TrusteePSmtp -SearchProperty PrimarySmtpAddress |
+                    lookup -Id $_.TrusteePSmtp -SearchProperty MailboxPSmtp |
                     Where-Object {
                         ($Web.PSmtp -notcontains $_.TrusteePSmtp) -and
                         ($Web.SourcePSmtp -notcontains $_.TrusteePSmtp)
@@ -537,7 +491,7 @@ process {
                         (Get-Variable -Name "Depth$($i+1)ForwardLookup").Value +=
 
                             [PSCustomObject]@{
-                                PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                MailboxPSmtp  = $_.MailboxPSmtp
                                 TrusteePSmtp        = $_.TrusteePSmtp
                                 SourceId            = $MemberId
                                 SourceType          = 'Mailbox'
@@ -546,16 +500,16 @@ process {
 
                     lookup -Id $_.TrusteePSmtp -SearchProperty TrusteePSmtp |
                     Where-Object {
-                        ($Web.PSmtp -notcontains $_.PrimarySmtpAddress) -and
-                        ($Web.SourcePSmtp -notcontains $_.PrimarySmtpADdress) -and
-                        ($_.PrimarySmtpAddress -ne $CurrentFLItem.PrimarySmtpAddress)
+                        ($Web.PSmtp -notcontains $_.MailboxPSmtp) -and
+                        ($Web.SourcePSmtp -notcontains $_.MailboxPSmtp) -and
+                        ($_.MailboxPSmtp -ne $CurrentFLItem.MailboxPSmtp)
                     } |
                     ForEach-Object {
 
                         (Get-Variable -Name "Depth$($i+1)ReverseLookup").Value +=
 
                             [PSCustomObject]@{
-                                PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                MailboxPSmtp  = $_.MailboxPSmtp
                                 TrusteePSmtp        = $_.TrusteePSmtp
                                 SourceId            = $MemberId
                                 SourceType          = 'Trustee'
@@ -567,7 +521,7 @@ process {
                         Id          = $MemberId
                         PSmtp       = $_.TrusteePSmtp
                         SourceId    = $_.SourceId
-                        SourcePSmtp = $_.PrimarySmtpAddress
+                        SourcePSmtp = $_.MailboxPSmtp
                         SourceType  = $_.SourceType
                         Depth       = $i
                     }
@@ -587,15 +541,15 @@ process {
 
                 $RLItemCounter++
 
-                if (($Web.PSmtp -notcontains $_.PrimarySmtpAddress) -and
-                    ($Web.SourcePSmtp -notcontains $_.PrimarySmtpADdress)) {
+                if (($Web.PSmtp -notcontains $_.MailboxPSmtp) -and
+                    ($Web.SourcePSmtp -notcontains $_.MailboxPSmtp)) {
 
                     $InnerProgress['PercentComplete'] = (($RLItemCounter/$CurrentLevelRLItems.Count) * 100)
-                    Write-Progress @InnerProgress -CurrentOperation "Forward/reverse lookup $($RLItemCounter) of $($CurrentLevelRLItems.Count): $($_.PrimarySmtpAddress)"
+                    Write-Progress @InnerProgress -CurrentOperation "Forward/reverse lookup $($RLItemCounter) of $($CurrentLevelRLItems.Count): $($_.MailboxPSmtp)"
 
                     $CurrentRLItem = $_
 
-                    lookup -Id $_.PrimarySmtpAddress -SearchProperty PrimarySmtpAddress |
+                    lookup -Id $_.MailboxPSmtp -SearchProperty MailboxPSmtp |
                     Where-Object {
                         ($Web.PSmtp -notcontains $_.TrusteePSmtp) -and
                         ($Web.SourcePSmtp -notcontains $_.TrusteePSmtp) -and
@@ -606,17 +560,17 @@ process {
                         (Get-Variable -Name "Depth$($i+1)ForwardLookup").Value +=
 
                             [PSCustomObject]@{
-                                PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                MailboxPSmtp  = $_.MailboxPSmtp
                                 TrusteePSmtp        = $_.TrusteePSmtp
                                 SourceId            = $MemberId
                                 SourceType          = 'Mailbox'
                             }
                     }
 
-                    lookup -Id $_.PrimarySmtpAddress -SearchProperty TrusteePSmtp |
+                    lookup -Id $_.MailboxPSmtp -SearchProperty TrusteePSmtp |
                     Where-Object {
-                        ($Web.PSmtp -notcontains $_.PrimarySmtpAddress) -and
-                        ($Web.SourcePSmtp -notcontains $_.PrimarySmtpAddress) -and
+                        ($Web.PSmtp -notcontains $_.MailboxPSmtp) -and
+                        ($Web.SourcePSmtp -notcontains $_.MailboxPSmtp) -and
                         ($_.TrusteePSmtp -ne $CurrentRLItem.TrusteePSmtp)
                     } |
                     ForEach-Object {
@@ -624,7 +578,7 @@ process {
                         (Get-Variable -Name "Depth$($i+1)ReverseLookup").Value +=
 
                             [PSCustomObject]@{
-                                PrimarySmtpAddress  = $_.PrimarySmtpAddress
+                                MailboxPSmtp  = $_.MailboxPSmtp
                                 TrusteePSmtp        = $_.TrusteePSmtp
                                 SourceId            = $MemberId
                                 SourceType          = 'Trustee'
@@ -634,7 +588,7 @@ process {
                     $Web += [PSCustomObject]@{
 
                         Id          = $MemberId
-                        PSmtp       = $_.PrimarySmtpAddress
+                        PSmtp       = $_.MailboxPSmtp
                         SourceId    = $_.SourceId
                         SourcePSmtp = $_.TrusteePSmtp
                         SourceType  = $_.SourceType

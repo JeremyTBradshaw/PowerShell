@@ -134,12 +134,7 @@ function writeLog {
 
 function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox) {
 
-    # Going with Exchange2010_SP1 because it is the earliest version of the EWS schema that does what we need, per:
-    # https://docs.microsoft.com/en-us/exchange/client-developer/exchange-web-services/ews-schema-versions-in-exchange#designing-your-application-with-schema-version-in-mind
-    $ExSvc = [ExchangeService]::new(
-
-        [ExchangeVersion]::Exchange2010_SP1
-    )
+    $ExSvc = [ExchangeService]::new()
 
     if ($PSCmdlet.ParameterSetName -like 'OAuth*') {
 
@@ -169,34 +164,25 @@ function New-EwsBinding ($AccessToken, $Url, [PSCredential]$Credential, $Mailbox
     $ExSvc
 }
 
-function Get-AllItemsSearchFolder ($ExSvc, $Mailbox, [switch]$Archive) {
+function Get-EwsFolder ($ExSvc, $Mailbox, $FolderDisplayName, [switch]$Archive) {
 
-    $AllItemsParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
+    $TargetRootFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
 
     $FolderView = [FolderView]::new(1)
-    $FolderView.Traversal = [FolderTraversal]::Shallow
+    $FolderView.Traversal = [FolderTraversal]::Deep
 
     $SearchFilterCollection = [SearchFilter+SearchFilterCollection]::new([LogicalOperator]::And)
-    $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new([FolderSchema]::DisplayName, 'AllItems'))
-    $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new(
+    $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new([FolderSchema]::DisplayName, $FolderDisplayName))
 
-            # ExtendedPropertyDefinition for MAPI property PR_FOLDER_TYPE:
-            [ExtendedPropertyDefinition]::new(
-                13825, #<--: Tag (Int32 value)
-                [MapiPropertyType]::Integer
-            ),
-            2 #<--: PR_FOLDER_TYPE = 2 (a.k.a. Search Folder (vs regular folder))
-        ))
+    $EwsFolder = $null
+    $EwsFolder = $ExSvc.FindFolders(
 
-    $AllItemsSearchFolder = $null
-    $AllItemsSearchFolder = $ExSvc.FindFolders(
-
-        [FolderId]::new($AllItemsParentFolder, $Mailbox),
+        [FolderId]::new($TargetRootFolder, $Mailbox),
         $SearchFilterCollection,
         $FolderView
     )
 
-    $AllItemsSearchFolder
+    $EwsFolder
 }
 
 
@@ -296,49 +282,57 @@ function Get-FolderItemSummary ($ExSvc, $Mailbox, $FolderId, [switch]$Archive) {
     $FolderPropertySet = [PropertySet]::new([BasePropertySet]::FirstClassProperties)
     $FolderPropertySet.Add($PR_MESSAGE_SIZE_EXTENDED)
 
-    $Folder = [Folder]::Bind($ExSvc,$FolderId,$psPropset)
+    $Folder = [Folder]::Bind($ExSvc,$FolderId,$FolderPropertySet)
 
+    Write-Debug "STOP here"
     $FolderSummary = [PSCustomObject]@{
 
-        $rptObject.Age0To14Days = [INT64]0
-        $rptObject.Age7To30DaysSize = [INT64]0
-        $rptObject.Age1to6MonthsSize = [INT64]0
-        $rptObject.Age6To12MonthsSize = [INT64]0
-        $rptObject.AgeGreator12MonthsSize = [INT64]0
-        $rptObject.AgeLessThan7days = [INT64]0
-        $rptObject.Age7To30Days = [INT64]0
-        $rptObject.Age1to6Months = [INT64]0
-        $rptObject.Age6To12Months = [INT64]0
-        $rptObject.AgeGreator12Months = [INT64]0
-        $rptObject.DeletedLessThan7daysSize = [INT64]0
-        $rptObject.Deleted7To30DaysSize = [INT64]0
-        $rptObject.Deleted1to6MonthsSize = [INT64]0
-        $rptObject.Deleted6To12MonthsSize = [INT64]0
-        $rptObject.DeletedGreator12MonthsSize = [INT64]0
-        $rptObject.DeletedLessThan7days = [INT64]0
-        $rptObject.Deleted7To30Days = [INT64]0
-        $rptObject.Deleted1to6Months = [INT64]0
-        $rptObject.Deleted6To12Months = [INT64]0
-        $rptObject.DeletedGreator12Months = [INT64]0
-        $rptObject.MailboxName = $MailboxName
-        $rptObject.TotalNumberOfItems = $RecoverableItemsDeletions.TotalCount
+        Folder = $Folder.DisplayName
+        AgeDays0To14 = [INT64]0
+        AgeDays0To14Size = [INT64]0
+        AgeDays15To30 = [INT64]0
+        AgeDays15To30Size = [INT64]0
+        AgeMonths1to11 = [INT64]0
+        AgeMonths1to11Size = [INT64]0
+        AgeYears1to2 = [INT64]0
+        AgeYears1to2Size = [INT64]0
+        AgeYears2to5 = [INT64]0
+        AgeYears2to5Size = [INT64]0
+        AgeYears5andOlder = [INT64]0
+        AgeYears5andOlderSize = [INT64]0
     }
 
     $folderSizeVal = $null;
-    if($RecoverableItemsDeletions.TryGetProperty($PR_MESSAGE_SIZE_EXTENDED,[ref]$folderSizeVal)){
+    if($Folder.TryGetProperty($PR_MESSAGE_SIZE_EXTENDED,[ref]$folderSizeVal)){
         $rptObject.TotalSize = [Math]::Round([Int64]$folderSizeVal / 1mb,2)
     }
     #Define ItemView to retrive just 1000 Items
-    $ivItemView =  New-Object Microsoft.Exchange.WebServices.Data.ItemView(1000)
-    $itemPropset= new-object Microsoft.Exchange.WebServices.Data.PropertySet([Microsoft.Exchange.WebServices.Data.BasePropertySet]::IdOnly)
-    $itemPropset.Add([Microsoft.Exchange.WebServices.Data.ItemSchema]::DateTimeReceived)
-    $itemPropset.Add([Microsoft.Exchange.WebServices.Data.ItemSchema]::DateTimeCreated)
-    $itemPropset.Add([Microsoft.Exchange.WebServices.Data.ItemSchema]::LastModifiedTime)
-    $itemPropset.Add([Microsoft.Exchange.WebServices.Data.ItemSchema]::Size)
-    $fiItems = $null
-    $itemCnt = 0
+    $ItemView =  [ItemView]::new(1000)
+    $ItemPropset = [PropertySet]::new([BasePropertySet]::IdOnly)
+    $ItemPropset.Add([ItemSchema]::DateTimeReceived)
+    $ItemPropset.Add([ItemSchema]::DateTimeCreated)
+    $ItemPropset.Add([ItemSchema]::LastModifiedTime)
+    $ItemPropset.Add([ItemSchema]::Size)
+
+    $Items = @()
+    $PageSize = 1000
+    $Offset = 0
+    $MoreAvailable = $true
+
+    do {
+        $FindItemsResult = $ExSvc.FindItems($FolderId, $ItemView)
+        $Items += $FindItemsResult.Items
+
+        if ($FindItemsResult.MoreAvailable) {
+
+            $Offset = $FindItemsResult.NextPageOffset
+        }
+        else { $MoreAvailable = $false }
+    }
+    while ($MoreAvailable)
+
     do{
-        $fiItems = $service.FindItems($RecoverableItemsDeletions.Id,$ivItemView)
+        $fiItems = $service.FindItems($FolderId,$ItemView)
         #[Void]$service.LoadPropertiesForItems($fiItems,$psPropset)
         foreach($Item in $fiItems.Items){
             $Notadded = $true
@@ -412,36 +406,36 @@ function Get-FolderItemSummary ($ExSvc, $Mailbox, $FolderId, [switch]$Archive) {
         }
         $ivItemView.Offset += $fiItems.Items.Count
     }while($fiItems.MoreAvailable -eq $true)
-    if($rptObject.AgeLessThan7daysSize -gt 0){
-        $rptObject.AgeLessThan7daysSize = [Math]::Round($rptObject.AgeLessThan7daysSize/ 1mb,2)
-    }
-    if($rptObject.Age7To30DaysSize -gt 0){
-        $rptObject.Age7To30DaysSize = [Math]::Round($rptObject.Age7To30DaysSize/ 1mb,2)
-    }
-    if($rptObject.Age1to6MonthsSize -gt 0){
-        $rptObject.Age1to6MonthsSize = [Math]::Round($rptObject.Age1to6MonthsSize/ 1mb,2)
-    }
-    if($rptObject.Age6To12MonthsSize -gt 0){
-        $rptObject.Age6To12MonthsSize = [Math]::Round($rptObject.Age6To12MonthsSize/ 1mb,2)
-    }
-    if($rptObject.AgeGreator12MonthsSize -gt 0){
-        $rptObject.AgeGreator12MonthsSize = [Math]::Round($rptObject.AgeGreator12MonthsSize/ 1mb,2)
-    }
-    if($rptObject.DeletedLessThan7daysSize -gt 0){
-        $rptObject.DeletedLessThan7daysSize = [Math]::Round($rptObject.DeletedLessThan7daysSize/ 1mb,2)
-    }
-    if($rptObject.Deleted7To30DaysSize -gt 0){
-        $rptObject.Deleted7To30DaysSize = [Math]::Round($rptObject.Deleted7To30DaysSize/ 1mb,2)
-    }
-    if($rptObject.Deleted1to6MonthsSize -gt 0){
-        $rptObject.Deleted1to6MonthsSize = [Math]::Round($rptObject.Deleted1to6MonthsSize/ 1mb,2)
-    }
-    if($rptObject.Deleted6To12MonthsSize -gt 0){
-        $rptObject.Deleted6To12MonthsSize = [Math]::Round($rptObject.Deleted6To12MonthsSize/ 1mb,2)
-    }
-    if($rptObject.DeletedGreator12MonthsSize -gt 0){
-        $rptObject.DeletedGreator12MonthsSize = [Math]::Round($rptObject.DeletedGreator12MonthsSize/ 1mb,2)
-    }
+    # if($rptObject.AgeLessThan7daysSize -gt 0){
+    #     $rptObject.AgeLessThan7daysSize = [Math]::Round($rptObject.AgeLessThan7daysSize/ 1mb,2)
+    # }
+    # if($rptObject.Age7To30DaysSize -gt 0){
+    #     $rptObject.Age7To30DaysSize = [Math]::Round($rptObject.Age7To30DaysSize/ 1mb,2)
+    # }
+    # if($rptObject.Age1to6MonthsSize -gt 0){
+    #     $rptObject.Age1to6MonthsSize = [Math]::Round($rptObject.Age1to6MonthsSize/ 1mb,2)
+    # }
+    # if($rptObject.Age6To12MonthsSize -gt 0){
+    #     $rptObject.Age6To12MonthsSize = [Math]::Round($rptObject.Age6To12MonthsSize/ 1mb,2)
+    # }
+    # if($rptObject.AgeGreator12MonthsSize -gt 0){
+    #     $rptObject.AgeGreator12MonthsSize = [Math]::Round($rptObject.AgeGreator12MonthsSize/ 1mb,2)
+    # }
+    # if($rptObject.DeletedLessThan7daysSize -gt 0){
+    #     $rptObject.DeletedLessThan7daysSize = [Math]::Round($rptObject.DeletedLessThan7daysSize/ 1mb,2)
+    # }
+    # if($rptObject.Deleted7To30DaysSize -gt 0){
+    #     $rptObject.Deleted7To30DaysSize = [Math]::Round($rptObject.Deleted7To30DaysSize/ 1mb,2)
+    # }
+    # if($rptObject.Deleted1to6MonthsSize -gt 0){
+    #     $rptObject.Deleted1to6MonthsSize = [Math]::Round($rptObject.Deleted1to6MonthsSize/ 1mb,2)
+    # }
+    # if($rptObject.Deleted6To12MonthsSize -gt 0){
+    #     $rptObject.Deleted6To12MonthsSize = [Math]::Round($rptObject.Deleted6To12MonthsSize/ 1mb,2)
+    # }
+    # if($rptObject.DeletedGreator12MonthsSize -gt 0){
+    #     $rptObject.DeletedGreator12MonthsSize = [Math]::Round($rptObject.DeletedGreator12MonthsSize/ 1mb,2)
+    # }
 }
 function Get-ConnectingUserSmtpAddress ($ExSvc) {
 
@@ -557,7 +551,7 @@ try {
     $MainProgressParams = @{
 
         Id       = 0
-        Activity = "Get-MailboxLargeItem.ps1 (Primary Mailboxes) - Start time: $($dtNow)"
+        Activity = "$($PSCmdlet.MyInvocation.MyCommand.Name) (Primary Mailboxes) - Start time: $($dtNow)"
     }
 
     $MailboxCounter = 0
@@ -566,7 +560,7 @@ try {
 
         $MailboxCounter++
 
-        $MainProgressParams['Status'] = "Finding large items ($($LargeItemSizeMB)+ MB) | Mailbox $($MailboxCounter) of $($Mailboxes.Count)"
+        $MainProgressParams['Status'] = "Mailbox $($MailboxCounter) of $($Mailboxes.Count)"
         $MainProgressParams['PercentComplete'] = (($MailboxCounter / $Mailboxes.Count) * 100)
 
         if ($Archive) {
@@ -600,62 +594,8 @@ try {
 
             $MainProgressParams['CurrentOperation'] = "Current mailbox: $($Mailbox)"
 
-            $AllItemsSearchFolder = $null
-            $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive
+            Write-Debug "STOP here to develop the script"
 
-            if (-not $AllItemsSearchFolder) {
-
-                $currentMsg = $null
-                $currentMsg = "Mailbox: $($Mailbox) | No 'AllItems' hidden search folder found."
-                writeLog @writeLogParams -Message $currentMsg
-
-                if ($PSCmdlet.ShouldProcess(
-
-                        "Mailbox: $($Mailbox) | Creating new 'AllItems' hidden search folder.",
-                        "Are you sure you want to create a new 'AllItems' hidden search folder?",
-                        $currentMsg
-                    )) {
-                    [void](New-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive)
-
-                    writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Created new 'AllItems' hidden search folder."
-
-                    Start-Sleep -Seconds 3 #<--: Not expected often so 3 seconds is acceptable.
-
-                    $AllItemsSearchFolder = Get-AllItemsSearchFolder -ExSvc $ExSvc -Mailbox $Mailbox -Archive:$Archive
-
-                    if (-not $AllItemsSearchFolder) { throw 90210 }
-                }
-            }
-
-            if ($AllItemsSearchFolder) {
-
-                writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Found 'AllItems' search folder.  Searching it..."
-
-                $getLargeItemsParams = @{
-
-                    ExSvc           = $ExSvc
-                    Mailbox         = $Mailbox
-                    FolderId        = $AllItemsSearchFolder.Id
-                    LargeItemSizeMB = $LargeItemSizeMB
-                    Archive         = $Archive
-                }
-                $LargeItems = @()
-                $LargeItems += Get-LargeItems @getLargeItemsParams
-
-                writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Found $($LargeItems.Count) large items."
-
-                if ($LargeItems.Count -ge 1) {
-
-                    if ($PSCmdlet.ParameterSetName -like '*_CSV') {
-                        if (-not $WhatIfPreference.IsPresent) {
-
-                            writeLog @writeLogParams -Message "Mailbox: $($Mailbox) | Writing large items to output CSV."
-                            $LargeItems | Export-Csv -Path $OutputCSV -Append -Encoding UTF8 -NoTypeInformation -ErrorAction Stop
-                        }
-                    }
-                    else { $LargeItems }
-                }
-            }
         }
         catch {
             # Depends on PSVersion 5.1, or for PSVersions 6+ - $DebugPreference set to 'Inquire':
