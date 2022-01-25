@@ -109,8 +109,4 @@ process {
             $addressObject
         }
     }
-
-    #=========#--------------------------#
-    #endregion# Part 2 - Process Mailboxes
-    #=========#--------------------------#
 }
