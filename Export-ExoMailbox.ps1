@@ -123,9 +123,6 @@ try {
         }
     )
 
-    if ($FolderStatistics.Count -ge 1) {
-
-    }
     $FolderPicker = @()
     $fCounter = 0
     foreach ($fStat in $FolderStatistics) {
