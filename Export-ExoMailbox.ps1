@@ -24,6 +24,12 @@
     Indicates the mailbox is an Inactive Mailbox (which needs to be indicated to New-ComplianceSearch as
     -ExchangeLocation ".<PrimarySmtpAddress>").
 
+    .Parameter SearchNameOverride
+    By default the Content/Compliance Search will be named:
+    "Export-EXOMailbox.ps1_<MailboxPSmtp>_<Primary|Archive|Primary+Archive>_<(optionally)InactiveMBX>"
+
+    If an existing search by the same name is found, the script will attempt to delete it before creating a new one.
+
     .Example
     .\Export-EXOMailbox.ps1 -AdminUPN admin1@contoso.onmicrosoft.com -MailboxPSmtp user1@contoso.com
 
@@ -47,7 +53,10 @@
 #Requires -PSEdition Desktop
 #Requires -Version 5.1
 #Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '2.0.5' }
-[CmdletBinding()]
+[CmdletBinding(
+    SupportsShouldProcess,
+    ConfirmImpact = 'High'
+)]
 param (
     [Parameter(Mandatory)]
     [string]$AdminUPN,
@@ -58,7 +67,9 @@ param (
     [ValidateSet('Primary', 'Archive', 'Both')]
     [string]$MailboxSelection = 'Both',
 
-    [switch]$InactiveMailbox
+    [switch]$InactiveMailbox,
+
+    [string]$SearchNameOverride
 )
 
 try {
@@ -197,7 +208,8 @@ try {
     }
     connectIPPSSession
 
-    $SearchName = "Mailbox-Search_$($MailboxPSmtp)"
+    $SearchName = "Export-EXOMailbox.ps1_$($MailboxPSmtp)_$($MailboxSelection -replace 'Both','Primary+Archive')$(if ($InactiveMailbox) { '_InactiveMBX' })"
+    # $SearchName = "Mailbox-Search_$($MailboxPSmtp)"
 
     Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($SearchName))"
     $ComplianceSearchParams = @{
@@ -211,9 +223,19 @@ try {
     $ComplianceSearch = Get-ComplianceSearch $SearchName -ErrorAction SilentlyContinue
     if ($ComplianceSearch) {
 
-        Write-Progress @progress -Status "Removing pre-existing compliance search '$($SearchName)' before creating a new one by the same name.  Then sleeping 30 seconds before proceeding."
-        Remove-ComplianceSearch $SearchName -Confirm:$false -ErrorAction SilentlyContinue
-        Start-Sleep -Seconds 30
+        if ($PSCmdlet.ShouldProcess(
+                "Existing/conflicting compliance search found: $($SearchName) ($($ComplianceSearch.Identity))",
+                'Delete'
+            )
+        ) {
+            Write-Progress @progress -Status "Removing pre-existing compliance search '$($SearchName)' before creating a new one by the same name.  Then sleeping 30 seconds before proceeding."
+            Remove-ComplianceSearch $SearchName -Confirm:$false -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 30
+        }
+        else {
+            Write-Warning -Message "Ending script prematurely due to existing compliance search found with conflicting name '$($SearchName)'."
+            break
+        }
     }
     $ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop
 
@@ -244,8 +266,8 @@ try {
             Status         = $ComplianceSearch.Status
             SuccessResults = $ComplianceSearch.SuccessResults
             Items          = $ComplianceSearch.Items
-            SizeMB         = [math]::Round($SearchResultBytes / 1MB, 2)
-            SizeGB         = [math]::Round($SearchResultBytes / 1GB, 2)
+            SizeMB         = [math]::Round($ComplianceSearch.Size / 1MB, 2)
+            SizeGB         = [math]::Round($ComplianceSearch.Size / 1GB, 2)
             ExportPSTUrl   = 'https://compliance.microsoft.com/contentsearchv2?viewid=search'
         }
     }
