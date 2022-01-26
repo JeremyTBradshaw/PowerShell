@@ -33,6 +33,9 @@
 
     .Example
     $MbxArray | .\Get-RecipientEmailAddresses.ps1 -CompareWithAcceptedDomains -PrefixesToIgnore x400,x500 | where {$_.IsAcceptedDomain -ne $true}
+
+    .Link
+    https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-RecipientEmailAddresses.ps1
 #>
 #Requires -PSEdition Desktop
 #Requires -Version 5.1
