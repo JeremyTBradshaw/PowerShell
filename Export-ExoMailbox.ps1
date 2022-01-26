@@ -34,6 +34,9 @@
     .\Export-EXOMailbox.ps1 -AdminUPN admin1@contoso.onmicrosoft.com -MailboxPSmtp user1@contoso.com
 
     .Example
+    .\Export-EXOMailbox.ps1 -AdminUPN admin1@contoso.onmicrosoft.com -MailboxPSmtp user1@contoso.com -SearchNameOverride User1Export_2022-01-26
+
+    .Example
     .\Export-EXOMailbox.ps1 -AdminUPN admin1@contoso.onmicrosoft.com -MailboxPSmtp user1@contoso.com -MailboxSelection Primary
 
     .Example
@@ -208,10 +211,12 @@ try {
     }
     connectIPPSSession
 
-    $SearchName = "Export-EXOMailbox.ps1_$($MailboxPSmtp)_$($MailboxSelection -replace 'Both','Primary+Archive')$(if ($InactiveMailbox) { '_InactiveMBX' })"
-    # $SearchName = "Mailbox-Search_$($MailboxPSmtp)"
+    $SearchName = if ($PSBoundParameters.ContainsKey('SearchNameOverride')) { $SearchNameOverride } else {
 
-    Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($SearchName))"
+        "Export-EXOMailbox.ps1_$($MailboxPSmtp)_$($MailboxSelection -replace 'Both','Primary+Archive')$(if ($InactiveMailbox) { '_InactiveMBX' })"
+    }
+
+    Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($SearchName)')"
     $ComplianceSearchParams = @{
 
         Name                                  = $SearchName
@@ -239,7 +244,7 @@ try {
     }
     $ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop
 
-    Write-Progress @progress -Status "Start-ComplianceSearch (-Name '$($SearchName))"
+    Write-Progress @progress -Status "Start-ComplianceSearch (-Name '$($SearchName)')"
     Start-ComplianceSearch $SearchName -ErrorAction Stop
     do {
         Write-Progress @progress -Status "Waiting for compliance search to complete (search name: '$($SearchName)')"
