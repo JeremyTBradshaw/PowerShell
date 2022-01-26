@@ -1,17 +1,37 @@
 # Welcome to my PowerShell repository
 
-This repo is where I maintain most of my PowerShell scripting work.  If often seems to come back to Exchange for me and PowerShell, so much of my work here caters to that.  My only real boundary for what will live here though is that it's PowerShell (scripts, functions, modules, etc.), so over time the content will surely bounce around between more topics.
+This repo is where I maintain much of my PowerShell scripting work.  If often seems to come back to Exchange for me and PowerShell, so much of my work here caters to that.  My only real boundary for what will live here though is that it's PowerShell (scripts, functions, modules, etc.), so over time the content will surely bounce around between more topics.
 
 ℹ Most of my scripts / functions have detailed comment based help to make using them easier.  This can be read here on GitHub by viewing the code (which is syntax-highlighted for easy viewing), or directly in PowerShell which can also be handy.
 ```PowerShell
 PS C:\> .\Get-MailboxLargeItems.ps1 -?
-PS C:\> Get-Help New-LargeItemsSearchFolder.ps1 -Examples
+PS C:\> Get-Help Export-EXOMailbox.ps1 -Examples
 PS C:\> Get-Help Get-MailboxTrusteeWebSQLEdition.ps1 -Full
 ```
 
 # Project Portfolio
 
 While the repo's content is an ever changing (mostly growing), list of items, this landing page/ReadMe is where I list some of my favorite ones, just some highlights per se.  Browse the code to see if there's anything else you might find useful.
+
+## Currently In My Sights
+
+I have been banging out reps with Microsoft Graph, particularly consuming it with [**MSGraphPSEssentials**](https://github.com/JeremyTBradshaw/MSGraphPSEssentials).  I have also been using SharePoint (Online) lists (via MS Graph/PowerShell) as an alternative to spreadsheets and databases.  It's quite fantastic, I must say.  With this, I have many ideas of solutions which would benefit from this same workflow.  One perfect candidate script which requires some updating is [**Get-EXOMailboxTrustee.ps1**](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-EXOMailboxTrustee.ps1); it needs to be updated to match the ouptput from [Get-MailboxTrustee.ps1](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrustee.ps1).  In addition to that, I think I will start writing some generic functions here to make using MS Graph and SharePoint lists specifically an easy and enjoyable process.  ...as time permits, but definitely on my radar.
+
+## January 2022
+
+### [Export-EXOMailbox.ps1](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Export-EXOMailbox.ps1)
+
+This is a re-write of an old script by somebody from Microsoft who published it on TechNet Gallery as 'Export-Folder.ps1'.  It still does the essential same steps, however the code is cleaned up and made to support EXO/SCC PowerShell module of today.  Support has been added for selecting either or both the primary and archive mailbox, as well as for Inactive mailboxes.  Minus Security and Compliance Center PowerShell being a little flakey and failure-for-no-good-reason-prone, the script is quite slick.
+
+### [Get-RecipientEmailAddresses.ps1](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-RecipientEmailAddresses.ps1)
+
+Have you ever wanted to export all email addresses (a.k.a., proxyAddresses) so that each one was it's own object?  The use cases have stacked up for me over the years and finally here is a script to make the process nice and easy.  It includes some properties to make working with these in bulk easier (i.e., EmailAddress, Prefix, Domain, IsAcceptedDomain (optional)) and a couple properties to identify the recipient which holds the email address (PrimarySmtpAddress, Guid).  Some parameters have been added to help control which email addresses are included in the output, and if the addresses' domains should be compared against Exchange's list of Accepted Domains.  That last point helps to find email addresses that will prevent you from migrating your mailboxes to EXO (due to domain not being an Accepted Domain).
+
+## 2021 Hiatus
+
+Most of my focus in 2021 went to (work, and) [MSGraphPSEssentials](https://github.com/JeremyTBradshaw/MSGraphPSEssentials).  While you can bet PowerShell was open all day every day for the entire year, and that I was burning the midnight oil the entire time through, most of my work on stuff in this repo was refinements, updates, etc. to existing scripts.  You can see the commits and timestamps throughout the repo to see where my efforts went.
+
+[Get-MailboxTrustee.ps1](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrustee.ps1) and [Get-MailboxTrusteeWebSQLEdition.ps1](https://github.com/JeremyTBradshaw/PowerShell/blob/main/Get-MailboxTrusteeWebSQLEdition.ps1) got a nice chunk of TLC and the rest of the *MailboxTrustee* family of scripts was put to rest (deprecated).
 
 ## December 2020
 
@@ -20,6 +40,8 @@ While the repo's content is an ever changing (mostly growing), list of items, th
 I re-wrote this script and changed the way it goes about searching for items.  It borrows ideas from mainly Glen Scales' postings around the web.  I'm very happy with this script at this point and will publish it to the PowerShell Gallery soon.
 
 ### [EwsOAuthAppOnlyEssentials](https://github.com/JeremyTBradshaw/EwsOAuthAppOnlyEssentials)
+
+**Update (2022-01-26)**: EwsOAuthAppOnlyEssentials has been deprecated and the same functionality ported over to [MSGraphPSEssentials](https://github.com/JeremyTBradshaw/MSGraphPSEssentials).
 
 With my recent experience learning and using the EWS Managed API, I walked into something wonderful - I could reuse code from my MSGraphAppOnlyEssentials module to easily obtain EWS OAuth access tokens for use with Exchange Online!  Hence, the birth of this new module.  It's a near copy/paste of the functions `New-MSGraphAccessToken` (-> `New-EwsAccessToken`) and `New-SelfSignedMSGraphApplicationCertificate` (-> `New-SelfSignedEwsOAuthApplicationCertificate`).  Seems a little cheesy but I like it, and this module will also find it's way to the PowerShell Gallery soon.
 
