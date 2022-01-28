@@ -75,6 +75,13 @@ param (
     [string]$SearchNameOverride
 )
 
+if ($WhatIfPreference.IsPresent) {
+
+    "Microsoft does not support -WhatIf for the Security and Compliance Center cmdlets.  " +
+    "ShouldProcess support is included in this script to avoid accidentally deleting any compliance searches.  " +
+    "Accordingly, -Confirm is still supported, but -WhatIf is not.  Exiting script." | Write-Warning
+    break
+}
 try {
     $progress = @{
 
