@@ -7,9 +7,9 @@
     cmdlets involved (Get-DistributionGroup, Get-DistributionGroupMember) are REST-backed in these versions, meaning
     the script will have a chance at surviving in large orgs with many distribution groups/members.
 
-    If users are a member via multiple avenues (i.e., direct member and/or membership in one or more nested groups)
-    they will show up in the output as many times as necessary.  For this reason it is recommended to use a pivot table
-    to summarize the results.  The pivot table rows should be in order of: top level group > member > directGroupId.
+    If any members are groups which are nested multiple times, whether this means circular nesting or just redundant
+    nesting, their non-group members will only be captured once and all other occurrences of the nested group will be
+    marked as MembershipType = 'Redundantly Nested'.
 
     .Parameter Identity
     Supply one or more distribution groups to this parameter.  Follow the instructions from Microsoft for the -Identity
