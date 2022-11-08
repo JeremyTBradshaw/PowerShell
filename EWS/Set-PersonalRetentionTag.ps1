@@ -8,6 +8,31 @@
     that uses the 'Move to archive' action but has 'Never' (or 0 days) set for the retention period, and then A) add
     that tag to an MRM retention policy, and B) assign that tag to the folders of choice.
 
+    .Parameter EwsManagedApiDllFilePath
+    Specifies the path the the Microsoft.Exchange.WebServices.dll file.  Requires product/file version 15.00.0913.015.
+    Defaults to 'C:\Program Files\Microsoft\Exchange\Web Services\2.2\Microsoft.Exchange.WebServices.Data.dll', and
+    doesn't try to verify otherwise that the installable EWS Managed API has been installed, it just needs access to
+    the single DLL file, wherever it may be.
+
+    .Parameter AccessToken
+    Supply $Token where the token was obtained using MSGraphPSEssentials (PS module). For example:
+    $Token = New-MSGraphAccessToken -ApplicationId <App.Id Guid> -TenantId <Tenant>.onmicrosoft.com -ExoEwsAppOnlyScope
+
+    An access token obtain using a public client flow is also supported.  For example:
+    $Token = New-MSGraphAccessToken -ApplicationId <App.Id Guid> -Scopes Ews.AccessAsUser.All
+
+    .Parameter PersonalRetentionTagGuid
+    Find the Guid of the intended Personal Tag using EXO PowerShell: Get-RetentionPolicyTag | select Name, Guid
+
+    .Parameter RetentionPeriodInDaysOfTag
+    This should match the retention age set in the retention tag specified in the -PersonalRetentionTagGuid parameter.
+
+    .Parameter MailboxPSMTPs
+    Specify one or more mailboxes' PrimarySmtpAddress to be processed.
+
+    .Parameter FolderDisplayNames
+    Specifies which folders to apply the personal tag to. E.g., -FolderDisplayNames Calendar, Tasks, Notes
+
     .Notes
     Setting personal retention tags on folders in mailboxes via EWS is not a Microsoft-supported approach.  The
     original articles which I've linked in this help section were intended for use with Exchange 2010 / Outlook 2010. I
@@ -17,6 +42,8 @@
     worth going through with this operation since it could lead to confusion for users and there is no solution for
     this lack of client visibility of the assigned personal tag.
 
+    Access Token: $Token1 = New-MSGraphAccessToken -ApplicationId b47f794e-1445-45b7-984f-f61569971508 -TenantId moderncomms433063.onmicrosoft.com -Certificate (Get-ChildItem cert:\LocalMachine\My\<Thumbprint_of_Cert>)
+
     .Link
     https://learn.microsoft.com/en-us/dotnet/api/microsoft.exchange.webservices.data.wellknownfoldername?view=exchange-ews-api
 
@@ -24,69 +51,74 @@
     https://learn.microsoft.com/en-us/archive/blogs/akashb/stamping-retention-policy-tag-using-ews-managed-api-1-1-from-powershellexchange-2010
 
     .Example
-    .\Set-PersonalRetentionTagViaEWS.ps1 `
+    .\Set-PersonalRetention.ps1 `
         -FolderDisplayNames Calendar, Tasks, Notes `
         -PersonalRetentionTagGuid 41352f92-b179-4e42-bf4b-ea807b495a0b `
         -RetentionPeriodInDaysOfTag 0 `
         -MailboxPSMTPs user1@contoso.com, user2@contoso.com, user3@contoso.com `
         -EwsManagedApiDllFilePath .\Microsoft.Exchange.WebServices.dll `
-        -AADRegisteredApplicationId 92795d50-1691-46f5-8026-07dc6ef33261
+        -AccessToken $Token
 #>
 #Requires -Version 5.1 -PSEdition Desktop
 #Requires -Modules @{ModuleName = 'MSGraphPSEssentials'; Guid = '7394f3f8-a172-4e18-8e40-e41295131e0b'; RequiredVersion = '0.6.0'}
+#Requires -Modules @{ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; RequiredVersion = '3.0.0'}
+
 using namespace System.Management.Automation
-using namespace Microsoft.Exchange.WebServices.Data
+#using namespace Microsoft.Exchange.WebServices.Data
 
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)]
-    # [ValidateSet('Calendar', 'Tasks', 'Notes')]
-    [string[]]$FolderDisplayNames,
+    [System.IO.FileInfo]$EwsManagedApiDllFilePath,
+
+    [Parameter(Mandatory)]
+    [Object]$AccessToken,
 
     [Parameter(Mandatory)]
     [guid]$PersonalRetentionTagGuid,
 
-    [Parameter(Mandatory)]
+    [Parameter(Mandatory, HelpMessage = 'This should match the setting in the Personal Tag.')]
     [ValidateRange(0, 24855)]
     [int]$RetentionPeriodInDaysOfTag,
 
     [Parameter(Mandatory)]
     [string[]]$MailboxPSMTPs,
 
-    [Parameter(Mandatory)]
-    [System.IO.FileInfo]$EwsManagedApiDllFilePath,
-
-    [Parameter(Mandatory)]
-    [guid]$AADRegisteredApplicationId
+    [Parameter(Mandatory, HelpMessage = '-FolderDisplayNames Calendar, Tasks, Notes')]
+    [string[]]$FolderDisplayNames
 )
 
-Import-Module $EwsManagedApiDllFilePath
-
-$NewToken = New-MSGraphAccessToken -ApplicationId $AADRegisteredApplicationId -Scopes Ews.AccessAsUser.All
-$ExSvc = [ExchangeService]::new([ExchangeVersion]::Exchange2010_SP1)
-$ExSvc.Credentials = [OAuthCredentials]::new($NewToken.access_token)
+$ExSvc = [Microsoft.Exchange.WebServices.Data.ExchangeService]::new([Microsoft.Exchange.WebServices.Data.ExchangeVersion]::Exchange2010_SP1)
+$ExSvc.Credentials = [Microsoft.Exchange.WebServices.Data.OAuthCredentials]::new($AccessToken.access_token)
 $ExSvc.Url = 'https://outlook.office365.com/ews/exchange.asmx'
 $ExSvc.UserAgent = 'MSGraphPSEssentials/0.6.0'
 $ExSvc.Timeout = 150000
+$ExSvc.ImpersonatedUserId = [Microsoft.Exchange.WebServices.Data.ImpersonatedUserId]::new(
+
+    [Microsoft.Exchange.WebServices.Data.ConnectingIdType]::SmtpAddress, $Mailbox
+)
+
+# https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
+$ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
 
 function Update-FolderWithPersonalTag ($ExSvc, $Mailbox, $Folder) {
 
-    $FolderId = if ([WellKnownFolderName].GetEnumNames() -contains $Folder) { $Folder } else {
+    $FolderId = if ([Microsoft.Exchange.WebServices.Data.WellKnownFolderName].GetEnumNames() -contains $Folder) { $Folder } else {
 
         (Get-Folder -ExSvc $ExSvc -Mailbox $Mailbox -FolderDisplayName $Folder).Id
     }
 
     #PR_POLICY_TAG 0x3019
-    $PRPolicyTag = [ExtendedPropertyDefinition]::new(0x3019, [MapiPropertyType]::Binary)
+    $PRPolicyTag = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x3019, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Binary)
 
     #PR_RETENTION_FLAGS 0x301D
-    $PRRetentionFlags = [ExtendedPropertyDefinition]::new(0x301D, [MapiPropertyType]::Integer)
+    $PRRetentionFlags = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301D, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
 
     #PR_RETENTION_PERIOD 0x301A
-    $PRRetentionPeriod = [ExtendedPropertyDefinition]::new(0x301A, [MapiPropertyType]::Integer)
+    $PRRetentionPeriod = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301A, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
 
     #Bind to the folder and update it with retention-related extended properties:
-    $BoundFolder = [Folder]::Bind($ExSvc, $FolderId)
+    $BoundFolder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($ExSvc, $FolderId)
     $BoundFolder.SetExtendedProperty($PRRetentionFlags, 137)
     $BoundFolder.SetExtendedProperty($PRRetentionPeriod, $RetentionPeriodInDaysOfTag)
     $BoundFolder.SetExtendedProperty($PRPolicyTag, $PersonalRetentionTagGuid.ToByteArray())
@@ -97,16 +129,16 @@ function Get-Folder ($ExSvc, $Mailbox, $FolderDisplayName, [switch]$Archive) {
 
     $ParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
 
-    $FolderView = [FolderView]::new(1)
-    $FolderView.Traversal = [FolderTraversal]::Deep
+    $FolderView = [Microsoft.Exchange.WebServices.Data.FolderView]::new(1)
+    $FolderView.Traversal = [Microsoft.Exchange.WebServices.Data.FolderTraversal]::Deep
 
-    $SearchFilterCollection = [SearchFilter+SearchFilterCollection]::new([LogicalOperator]::And)
-    $SearchFilterCollection.Add([SearchFilter+IsEqualTo]::new([FolderSchema]::DisplayName, $FolderDisplayName))
+    $SearchFilterCollection = [Microsoft.Exchange.WebServices.Data.SearchFilter+SearchFilterCollection]::new([Microsoft.Exchange.WebServices.Data.LogicalOperator]::And)
+    $SearchFilterCollection.Add([Microsoft.Exchange.WebServices.Data.SearchFilter+IsEqualTo]::new([Microsoft.Exchange.WebServices.Data.FolderSchema]::DisplayName, $FolderDisplayName))
 
     $Folder = $null
     $Folder = $ExSvc.FindFolders(
 
-        [FolderId]::new($ParentFolder, $Mailbox),
+        [Microsoft.Exchange.WebServices.Data.FolderId]::new($ParentFolder, $Mailbox),
         $SearchFilterCollection,
         $FolderView
     )
@@ -114,9 +146,11 @@ function Get-Folder ($ExSvc, $Mailbox, $FolderDisplayName, [switch]$Archive) {
     $Folder
 }
 
-Write-Debug "Start working in live EWS here"
-
+$Counter = 0
 foreach ($Mailbox in $MailboxPSMTPs) {
+    $Counter++
+    Write-Progress -Activity "Processing $($Mailbox)" -PercentComplete (($Counter/$Mailboxes.count)*100) -Status "Working"
+
     foreach ($Folder in $FolderDisplayNames) {
 
         Update-FolderWithPersonalTag -ExSvc $ExSvc -Mailbox $Mailbox -Folder $Folder
