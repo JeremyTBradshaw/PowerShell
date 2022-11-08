@@ -10,7 +10,7 @@
 
     .Parameter EwsManagedApiDllFilePath
     Specifies the path the the Microsoft.Exchange.WebServices.dll file.  Requires product/file version 15.00.0913.015.
-    Defaults to 'C:\Program Files\Microsoft\Exchange\Web Services\2.2\Microsoft.Exchange.WebServices.Data.dll', and
+    Defaults to 'C:\Program Files\Microsoft\Exchange\Web Services\2.2\Microsoft.Exchange.WebServices.dll', and
     doesn't try to verify otherwise that the installable EWS Managed API has been installed, it just needs access to
     the single DLL file, wherever it may be.
 
@@ -42,7 +42,7 @@
     worth going through with this operation since it could lead to confusion for users and there is no solution for
     this lack of client visibility of the assigned personal tag.
 
-    Access Token: $Token1 = New-MSGraphAccessToken -ApplicationId b47f794e-1445-45b7-984f-f61569971508 -TenantId moderncomms433063.onmicrosoft.com -Certificate (Get-ChildItem cert:\LocalMachine\My\<Thumbprint_of_Cert>)
+    Access Token: $Token1 = New-MSGraphAccessToken -ApplicationId 37d171ae-c6bc-4485-be24-74ff28057485 -TenantId <Tenant>.onmicrosoft.com -Certificate (Get-ChildItem cert:\LocalMachine\My\<Thumbprint_of_Cert>)
 
     .Link
     https://learn.microsoft.com/en-us/dotnet/api/microsoft.exchange.webservices.data.wellknownfoldername?view=exchange-ews-api
@@ -63,7 +63,7 @@
 #Requires -Modules @{ModuleName = 'MSGraphPSEssentials'; Guid = '7394f3f8-a172-4e18-8e40-e41295131e0b'; RequiredVersion = '0.6.0'}
 #Requires -Modules @{ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; RequiredVersion = '3.0.0'}
 
-using namespace System.Management.Automation
+#using namespace System.Management.Automation
 #using namespace Microsoft.Exchange.WebServices.Data
 
 [CmdletBinding()]
@@ -87,72 +87,77 @@ param(
     [Parameter(Mandatory, HelpMessage = '-FolderDisplayNames Calendar, Tasks, Notes')]
     [string[]]$FolderDisplayNames
 )
+try {
+    Import-Module $EwsManagedApiDllFilePath -ErrorAction Stop
 
-$ExSvc = [Microsoft.Exchange.WebServices.Data.ExchangeService]::new([Microsoft.Exchange.WebServices.Data.ExchangeVersion]::Exchange2010_SP1)
-$ExSvc.Credentials = [Microsoft.Exchange.WebServices.Data.OAuthCredentials]::new($AccessToken.access_token)
-$ExSvc.Url = 'https://outlook.office365.com/ews/exchange.asmx'
-$ExSvc.UserAgent = 'MSGraphPSEssentials/0.6.0'
-$ExSvc.Timeout = 150000
-$ExSvc.ImpersonatedUserId = [Microsoft.Exchange.WebServices.Data.ImpersonatedUserId]::new(
+    $ExSvc = [Microsoft.Exchange.WebServices.Data.ExchangeService]::new([Microsoft.Exchange.WebServices.Data.ExchangeVersion]::Exchange2010_SP1)
+    $ExSvc.Credentials = [Microsoft.Exchange.WebServices.Data.OAuthCredentials]::new($AccessToken.access_token)
+    $ExSvc.Url = 'https://outlook.office365.com/ews/exchange.asmx'
+    $ExSvc.UserAgent = 'MSGraphPSEssentials/0.6.0'
+    $ExSvc.Timeout = 150000
 
-    [Microsoft.Exchange.WebServices.Data.ConnectingIdType]::SmtpAddress, $Mailbox
-)
+    function Update-FolderWithPersonalTag ($ExSvc, $Mailbox, $Folder) {
 
-# https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
-$ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
+        $FolderId = if ([Microsoft.Exchange.WebServices.Data.WellKnownFolderName].GetEnumNames() -contains $Folder) { $Folder } else {
 
-function Update-FolderWithPersonalTag ($ExSvc, $Mailbox, $Folder) {
+            (Get-Folder -ExSvc $ExSvc -Mailbox $Mailbox -FolderDisplayName $Folder).Id
+        }
 
-    $FolderId = if ([Microsoft.Exchange.WebServices.Data.WellKnownFolderName].GetEnumNames() -contains $Folder) { $Folder } else {
+        #PR_POLICY_TAG 0x3019
+        $PRPolicyTag = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x3019, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Binary)
 
-        (Get-Folder -ExSvc $ExSvc -Mailbox $Mailbox -FolderDisplayName $Folder).Id
+        #PR_RETENTION_FLAGS 0x301D
+        $PRRetentionFlags = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301D, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
+
+        #PR_RETENTION_PERIOD 0x301A
+        $PRRetentionPeriod = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301A, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
+
+        #Bind to the folder and update it with retention-related extended properties:
+        $BoundFolder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($ExSvc, $FolderId)
+        $BoundFolder.SetExtendedProperty($PRRetentionFlags, 137)
+        $BoundFolder.SetExtendedProperty($PRRetentionPeriod, $RetentionPeriodInDaysOfTag)
+        $BoundFolder.SetExtendedProperty($PRPolicyTag, $PersonalRetentionTagGuid.ToByteArray())
+        $BoundFolder.Update()
     }
 
-    #PR_POLICY_TAG 0x3019
-    $PRPolicyTag = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x3019, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Binary)
+    function Get-Folder ($ExSvc, $Mailbox, $FolderDisplayName, [switch]$Archive) {
 
-    #PR_RETENTION_FLAGS 0x301D
-    $PRRetentionFlags = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301D, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
+        $ParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
 
-    #PR_RETENTION_PERIOD 0x301A
-    $PRRetentionPeriod = [Microsoft.Exchange.WebServices.Data.ExtendedPropertyDefinition]::new(0x301A, [Microsoft.Exchange.WebServices.Data.MapiPropertyType]::Integer)
+        $FolderView = [Microsoft.Exchange.WebServices.Data.FolderView]::new(1)
+        $FolderView.Traversal = [Microsoft.Exchange.WebServices.Data.FolderTraversal]::Deep
 
-    #Bind to the folder and update it with retention-related extended properties:
-    $BoundFolder = [Microsoft.Exchange.WebServices.Data.Folder]::Bind($ExSvc, $FolderId)
-    $BoundFolder.SetExtendedProperty($PRRetentionFlags, 137)
-    $BoundFolder.SetExtendedProperty($PRRetentionPeriod, $RetentionPeriodInDaysOfTag)
-    $BoundFolder.SetExtendedProperty($PRPolicyTag, $PersonalRetentionTagGuid.ToByteArray())
-    $BoundFolder.Update()
-}
+        $SearchFilterCollection = [Microsoft.Exchange.WebServices.Data.SearchFilter+SearchFilterCollection]::new([Microsoft.Exchange.WebServices.Data.LogicalOperator]::And)
+        $SearchFilterCollection.Add([Microsoft.Exchange.WebServices.Data.SearchFilter+IsEqualTo]::new([Microsoft.Exchange.WebServices.Data.FolderSchema]::DisplayName, $FolderDisplayName))
 
-function Get-Folder ($ExSvc, $Mailbox, $FolderDisplayName, [switch]$Archive) {
+        $Folder = $null
+        $Folder = $ExSvc.FindFolders(
 
-    $ParentFolder = if ($Archive) { 'ArchiveRoot' } else { ' Root' }
+            [Microsoft.Exchange.WebServices.Data.FolderId]::new($ParentFolder, $Mailbox),
+            $SearchFilterCollection,
+            $FolderView
+        )
 
-    $FolderView = [Microsoft.Exchange.WebServices.Data.FolderView]::new(1)
-    $FolderView.Traversal = [Microsoft.Exchange.WebServices.Data.FolderTraversal]::Deep
+        $Folder
+    }
 
-    $SearchFilterCollection = [Microsoft.Exchange.WebServices.Data.SearchFilter+SearchFilterCollection]::new([Microsoft.Exchange.WebServices.Data.LogicalOperator]::And)
-    $SearchFilterCollection.Add([Microsoft.Exchange.WebServices.Data.SearchFilter+IsEqualTo]::new([Microsoft.Exchange.WebServices.Data.FolderSchema]::DisplayName, $FolderDisplayName))
+    $Counter = 0
+    foreach ($Mailbox in $MailboxPSMTPs) {
+        $Counter++
+        Write-Progress -Activity "Processing $($Mailbox)" -PercentComplete (($Counter / $MailboxPSMTPs.count) * 100) -Status "Working"
 
-    $Folder = $null
-    $Folder = $ExSvc.FindFolders(
+        $ExSvc.ImpersonatedUserId = [Microsoft.Exchange.WebServices.Data.ImpersonatedUserId]::new(
 
-        [Microsoft.Exchange.WebServices.Data.FolderId]::new($ParentFolder, $Mailbox),
-        $SearchFilterCollection,
-        $FolderView
+        [Microsoft.Exchange.WebServices.Data.ConnectingIdType]::SmtpAddress, $Mailbox
     )
 
-    $Folder
-}
+    # https://docs.microsoft.com/en-us/archive/blogs/webdav_101/best-practices-ews-authentication-and-access-issues
+    $ExSvc.HttpHeaders['X-AnchorMailbox'] = $Mailbox
 
-$Counter = 0
-foreach ($Mailbox in $MailboxPSMTPs) {
-    $Counter++
-    Write-Progress -Activity "Processing $($Mailbox)" -PercentComplete (($Counter/$Mailboxes.count)*100) -Status "Working"
+        foreach ($Folder in $FolderDisplayNames) {
 
-    foreach ($Folder in $FolderDisplayNames) {
-
-        Update-FolderWithPersonalTag -ExSvc $ExSvc -Mailbox $Mailbox -Folder $Folder
+            Update-FolderWithPersonalTag -ExSvc $ExSvc -Mailbox $Mailbox -Folder $Folder
+        }
     }
 }
+catch { throw }
