@@ -25,40 +25,104 @@ param (
 )
 
 # Exit script if we do not have the necessary commands available:
-if (-not (Get-Command Get-DistributionGroup, Get-DistributionGroupMember -ErrorAction SilentlyContinue)) {
+if (-not (Get-Command Get-Recipient, Get-DistributionGroup, Get-DistributionGroupMember, Get-DynamicDistributionGroup -ErrorAction SilentlyContinue)) {
 
-    throw "This script requires an Exchange/EXO PowerShell session and the commands Get-DistributionGroup, Get-DistributionGroupMember."
+    throw "This script requires an Exchange/EXO PowerShell session and the commands Get-Recipient, Get-DistributionGroup, Get-DistributionGroupMember, and Get-DynamicDistributionGroup."
 }
 
-$Level = if ($PSBoundParameters.ContainsKey('StartingLevelOverride')) { $StartingLevelOverride } else { 1 }
 
-$ProgressSplat = @{
 
-    Activity = 'Getting distribution group members'
-    PercentComplete = -1
-}
+#======#----------#
+#region Functions #
+#======#----------#
 
-Write-Progress @ProgressSplat -Status "Finding level $($Level) members"
+function getGroup ($groupId) {
+    try {
+        $group = Get-Recipient -Identity "$($groupId)" -ErrorAction SilentlyContinue
 
-$Members = @(Get-DistributionGroupMember $StartingGroupPSMTP -ResultSize Unlimited |
-Select-Object @{Name='ParentGroup';Expression={'#N/A'}},
-@{Name='Level';Expression={$Level}},
-RecipientTypeDetails, PrimarySmtpAddress, DisplayName)
+        # The following non-standard section avoids Get-Recipient failing on recipient type "ExchangeSecurityGroup" which will cause the command to fail.
+        if ($group) {
+            if ($group.RecipientTypeDetails -notlike '*Group*') {
 
-do {
-    $ParentLevel = $Level
-    $Level++
-    foreach ($g in ($Members | Where-Object {$_.Level -eq $ParentLevel -and $_.RecipientTypeDetails -like '*group*'})) {
-
-        Write-Progress @ProgressSplat -Status "Finding members of level $($ParentLevel) member groups"
-
-        $Members += Get-DistributionGroupMember $g.PrimarySmtpAddress.ToString() -ResultSize Unlimited |
-        Select-Object @{Name='ParentGroup';Expression={$g.PrimarySmtpAddress}},
-        @{Name='Level';Expression={$Level}},
-        RecipientTypeDetails, PrimarySmtpAddress, DisplayName
+                throw "$($groupPSMTP) is not a static nor dynamic group.  Its RecipientTypeDetails value is: $($group.RecipientTypeDetails)"
+            }
+    
+            $group
+        }
+    }
+    catch {
+        Write-Debug "getGroup: Found a bad recipient"
+        Write-Warning "Failed on getGroup.  groupId: $($groupId)"
+        throw
     }
 }
-until ($Level -eq ($LevelsDeepToGo))
 
-# Output all members:
-$Members
+function getGroupMember ($group, $Level) {
+    try {
+        if ($group.RecipientTypeDetails -notlike '*Dynamic*') {
+    
+            Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited |
+            Select-Object @{Name='ParentGroup';Expression={if ($Level -eq 1) {'#N/A'} else { $group.PrimarySmtpAddress }}},
+            @{Name='Level';Expression={$Level}},
+            RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
+        }
+        else {
+            $dynamicGroup = Get-DynamicDistributionGroup -Identity "$($group.Guid.ToString())" -ErrorAction Stop
+            Get-Recipient -RecipientPreviewFilter $dynamicGroup.RecipientFilter -OrganizationalUnit $dynamicGroup.RecipientContainer -ResultSize Unlimited |
+            Select-Object @{Name='ParentGroup';Expression={if ($Level -eq 1) {'#N/A'} else { $group.PrimarySmtpAddress }}},
+            @{Name='Level';Expression={$Level}},
+            RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
+        }
+    }
+    catch {
+        Write-Debug "getGroupMember: Found a bad group"
+        Write-Warning "Failed on getGroupMember.  Group GUID: $($group.Guid), Group PSMTP: $($group.PrimarySmtpAddress), Group DisplayName: $($group.DisplayName), Level: $($Level)"
+        throw
+    }
+}
+
+#=========#----------#
+#endregion Functions #
+#=========#----------#
+
+
+
+#======#------------#
+#region Main Script #
+#======#------------#
+
+try {
+    $ProgressSplat = @{
+
+        Activity = 'Getting distribution group members'
+        PercentComplete = -1
+    }
+
+    $StartingGroup = getGroup -groupId "$($StartingGroupPSMTP)"
+
+    $Level = if ($PSBoundParameters.ContainsKey('StartingLevelOverride')) { $StartingLevelOverride } else { 1 }
+
+    Write-Progress @ProgressSplat -Status "Finding level $($Level) members"
+    
+    $Members = @(getGroupMember -group $StartingGroup -Level 1)
+    
+    do {
+        $ParentLevel = $Level
+        $Level++
+        foreach ($g in ($Members | Where-Object {$_.Level -eq $ParentLevel -and $_.RecipientTypeDetails -like '*Group*' -and (-not ($_.RecipientTypeDetails -eq 'ExchangeSecurityGroup'))})) {
+    
+            Write-Progress @ProgressSplat -Status "Finding members of level $($ParentLevel) member groups"
+    
+            $Members += getGroupMember -group (getGroup -groupId $g.Guid.ToString()) -Level $Level
+        }
+    }
+    until ($Level -eq $LevelsDeepToGo)
+    
+    # Output all members:
+    $Members
+}
+catch { throw }
+
+#=========#------------#
+#endregion Main Script #
+#=========#------------#
