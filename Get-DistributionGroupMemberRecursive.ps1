@@ -40,9 +40,8 @@ function getGroup ($groupId) {
     try {
         $group = Get-Recipient -Identity "$($groupId)" -ErrorAction SilentlyContinue
 
-        # The following non-standard section avoids Get-Recipient failing on recipient type "ExchangeSecurityGroup" which will cause the command to fail.
         if ($group) {
-            if ($group.RecipientTypeDetails -notlike '*Group*') {
+            if ($group.RecipientTypeDetails -notlike 'Mail*Group' -and $group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
 
                 throw "$($groupPSMTP) is not a static nor dynamic group.  Its RecipientTypeDetails value is: $($group.RecipientTypeDetails)"
             }
@@ -51,7 +50,6 @@ function getGroup ($groupId) {
         }
     }
     catch {
-        Write-Debug "getGroup: Found a bad recipient"
         Write-Warning "Failed on getGroup.  groupId: $($groupId)"
         throw
     }
@@ -59,23 +57,22 @@ function getGroup ($groupId) {
 
 function getGroupMember ($group, $Level) {
     try {
-        if ($group.RecipientTypeDetails -notlike '*Dynamic*') {
+        if ($group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
     
             Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited |
-            Select-Object @{Name='ParentGroup';Expression={if ($Level -eq 1) {'#N/A'} else { $group.PrimarySmtpAddress }}},
-            @{Name='Level';Expression={$Level}},
+            Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
+            @{Name = 'Level'; Expression = { $Level } },
             RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
         }
         else {
             $dynamicGroup = Get-DynamicDistributionGroup -Identity "$($group.Guid.ToString())" -ErrorAction Stop
             Get-Recipient -RecipientPreviewFilter $dynamicGroup.RecipientFilter -OrganizationalUnit $dynamicGroup.RecipientContainer -ResultSize Unlimited |
-            Select-Object @{Name='ParentGroup';Expression={if ($Level -eq 1) {'#N/A'} else { $group.PrimarySmtpAddress }}},
-            @{Name='Level';Expression={$Level}},
+            Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
+            @{Name = 'Level'; Expression = { $Level } },
             RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
         }
     }
     catch {
-        Write-Debug "getGroupMember: Found a bad group"
         Write-Warning "Failed on getGroupMember.  Group GUID: $($group.Guid), Group PSMTP: $($group.PrimarySmtpAddress), Group DisplayName: $($group.DisplayName), Level: $($Level)"
         throw
     }
@@ -94,7 +91,7 @@ function getGroupMember ($group, $Level) {
 try {
     $ProgressSplat = @{
 
-        Activity = 'Getting distribution group members'
+        Activity        = 'Getting distribution group members'
         PercentComplete = -1
     }
 
@@ -109,7 +106,7 @@ try {
     do {
         $ParentLevel = $Level
         $Level++
-        foreach ($g in ($Members | Where-Object {$_.Level -eq $ParentLevel -and $_.RecipientTypeDetails -like '*Group*' -and (-not ($_.RecipientTypeDetails -eq 'ExchangeSecurityGroup'))})) {
+        foreach ($g in ($Members | Where-Object { $_.Level -eq $ParentLevel -and ($_.RecipientTypeDetails -like 'Mail*Group*' -or $_.RecipientTypeDetails -eq 'DynamicDistributionGroup') })) {
     
             Write-Progress @ProgressSplat -Status "Finding members of level $($ParentLevel) member groups"
     
