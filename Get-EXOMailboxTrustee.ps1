@@ -1,21 +1,13 @@
 <#
     .Synopsis
-    EXO-exclusive successor to Get-MailboxTrustee.ps1, using only the newer V2 cmdlets.
+    EXO-exclusive alternative to Get-MailboxTrustee.ps1, using the newer V3 cmdlets, which are REST-backed.
 
-    .Description
-    No more Ivoke-Command, nor using the legacy cmdlets.  Now we're only the REST API cmdlets:
-        - Get-EXOMailbox
-        - Get-EXORecipient
-        - Get-EXOMailboxPermission
-        - Get-EXORecipientPermission
-        - Get-EXOMailboxFolderPermission
-    ...using the Azure AD ObjectId (a.k.a. ExternalDirectoryObjectId in EXO) for the Identity parameter throughout.
+    .Parameter MailboxId
+    Specifies a unique identifier property for one or more mailboxes to process, accepting pipeline input or manual
+    parameter entry.  Example properties to use: Guid, ExternalDirectoryObjectId, PrimarySmtpAddress, ExchangeGuid.
 
     .Parameter All
     Targets all mailboxes in the connected Exchange Online organization.
-
-    .Parameter ExternalDirectoryaObjectId
-    Targets only specified mailboxes, accepting pipeline input or manual parameter entry.
 
     .Parameter IncludePermissionTypes
     If not specified, all permission types are collected - FullAccess, SendAs, Send on Behalf, and common folders:
@@ -25,24 +17,21 @@
 
     .Example
     .\Get-EXOMailboxTrustee.ps1 -All
-    Get-Mailbox Conference* | .\Get-EXOMailboxTrustee.ps1
-    .\Get-EXOMailboxTrustee.ps1 -All -IncludePermissionTypes FullAccess, SendAs
-    .\Get-EXOMailboxTrustee.ps1 -ExternalDirectoryObjectId 12345678-1234-1234-123456789012 -IncludePermissionTypes CommonFolders
 
-    .Notes
-    Currently the -Filter parameter on the V2 cmdlets doesn't support one of PowerShell's quoting rules, so filtering
-    for values containing apostrophes is not possible (e.g. "Name -eq 'O''Doyle'" <--:see the doubling up of ').
-    The problem with this is that Microsoft return the Name property for users on mailbox folder permission objects.
-    So if a user with an apostrophe in their name holds a permission, that user won't be able to be looked up with
-    Get-EXORecipient in order to obtain their guaranteed-unique fields like Guid, ExternalDirectoryObjectId.  If/when
-    Microsoft resolve this issue, I'll update the script as well.  Until then, I capture these missed users with a note
-    in the TrusteeDisplayName output property.
+    .Example
+    Get-Mailbox Conference* | .\Get-EXOMailboxTrustee.ps1
+    
+    .Example
+    .\Get-EXOMailboxTrustee.ps1 -All -IncludePermissionTypes FullAccess, SendAs
+    
+    .Example
+    .\Get-EXOMailboxTrustee.ps1 -ExternalDirectoryObjectId 12345678-1234-1234-123456789012 -IncludePermissionTypes CommonFolders.
 
     .Outputs
-    The outputted objects contain five properties for both the mailbox and for the trustee:
+    The outputted objects contain five properties for both the mailbox and for the trustee, for guaranteed unique
+    identification:
         - DisplayName, PrimarySmtpAddress, RecipientTypeDetails
-        - Guid, ExternalDirectory
-    This should allow for plenty slice-and-dice capabilities in Excel, PowerBI, or a database.
+        - Guid, ExternalDirectoryObjectId
     Additionally, the folder (if applicable) and permission (i.e. AccessRights) are included:
         - Folder, Permission
 
@@ -54,26 +43,33 @@
     MailboxRecipientTypeDetails      : UserMailbox
     MailboxGuid                      : d1ce4896-3278-4285-8aa3-a1f5e9098cd3
     MailboxExternalDirectoryObjectId : 66b05549-c470-42e2-af64-bb843cfc8130
-    Folder                           : N/A
+    Folder                           : #N/A
     Permission                       : Send-As
     TrusteeDisplayName               : Test User 2
     TrusteePrimarySmtpAddress        : TestUser2@jb365ca.onmicrosoft.com
     TrusteeRecipientTypeDetails      : UserMailbox
     TrusteeGuid                      : 7ee0436c-a982-4447-a58e-e219f10883fd
     TrusteeExternalDirectoryObjectId : 72943358-59b4-45f7-bd3c-4407bcd2363f
+
+    .Notes
+    As of 2022-12-19, anywhere that Write-Progress is used, it is preceded with $ProgressPreference = 'Continue'.
+    This is due to an issue with the ExchangeOnlineManagement module where it sets the global variable to
+    'SilentlyContinue', hiding all progress.
 #>
 #Requires -Version 5.1
-#Requires -Modules ExchangeOnlineManagement
+#Requires -Modules @{ModuleName = 'ExchangeOnlineManagement'; ModuleVersion = '3.0.0'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'}
+
 [CmdletBinding(DefaultParameterSetName = 'CallerSpecified')]
 param(
     [Parameter(
         ParameterSetName = 'CallerSpecified',
         Mandatory,
+        ValueFromPipeline,
         ValueFromPipelineByPropertyName,
-        HelpMessage = "Use either the ObjectId of the mailbox's associated Azure AD user object, or the ExternalDirectoryObjectId of the mailbox itself (these ID's are linked)."
+        HelpMessage = 'Use a unique identifier of the mailbox (e.g., Guid, ExternalDirectoryObjectId, PrimarySmtpAddress, etc.).'
     )]
-    [Alias('ObjectId')]
-    [guid[]]$ExternalDirectoryObjectId,
+    [Alias('ExternalDirectoryObjectId', 'Guid', 'ExchangeGuid')]
+    [string[]]$MailboxId,
 
     [Parameter(ParameterSetName = 'All')]
     [switch]$All,
@@ -90,25 +86,29 @@ begin {
 
     $StopWatch1 = [System.Diagnostics.Stopwatch]::StartNew()
     $Progress = @{
-        Activity         = "Get-EXOMailboxTrustee - Start time: $([datetime]::Now-$StopWatch1.Elapsed)"
+        Activity         = "Get-EXOMailboxTrustee.ps1 - Start time: $([datetime]::Now-$StopWatch1.Elapsed)"
         PercentComplete  = -1
         Status           = '...'
         CurrentOperation = "Initializing"
     }
-    Write-Progress @Progress
+    $ProgressPreference = 'Continue';Write-Progress @Progress
 
-    if (-not (Get-PSSession | Where-Object { $_.ComputerName -eq 'outlook.office365.com' })) {
-        Write-Warning -Message 'Must be connected to Exchange Online PowerShell V2 (i.e. Connect-ExchangeOnline).'
-        break
+    $_requiredCommands = @(
+        'Get-Mailbox', 'Get-Recipient',
+        'Get-MailboxPermission', 'Get-RecipientPermission', 'Get-MailboxFolderPermission'
+    )
+    if (-not (Get-Command $_requiredCommands -ErrorAction SilentlyContinue)) {
+        
+        throw "This script requires an active connection with v3.0.0 or newer of the ExchangeOnlineManagement module (i.e., Connect-ExchangeOnline).  " +
+        "Once connected, the following commands are required to be available: $($_requiredCommands -join ', ')"
     }
-    Write-Verbose -Message "EXO PS session detected.  Proceeding with script."
 
     if ($PSCmdlet.ParameterSetName -eq 'All') {
 
         $Progress['CurrentOperation'] = 'Getting all EXO mailboxes'
-        Write-Progress @Progress
+        $ProgressPreference = 'Continue';Write-Progress @Progress
 
-        $EXOMailboxes = Get-EXOMailbox -Properties DisplayName, RecipientTypeDetails, PrimarySmtpAddress, Guid, ExternalDirectoryObjectId -ResultSize Unlimited
+        $MailboxId = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
     }
     
     if (-not ($PSBoundParameters.ContainsKey('IncludePermissionTypes'))) {
@@ -117,41 +117,41 @@ begin {
     }
 
     $TrusteeTracker = @{ }
+    $ProcessedCounter = 0
+    $StopWatch2 = [System.Diagnostics.Stopwatch]::StartNew()
+
+    $Progress['CurrentOperation'] = 'Starting to process mailboxes'
+    $ProgressPreference = 'Continue';Write-Progress @Progress
 }
 
 process {
 
-    if ($PSCmdlet.ParameterSetName -eq 'CallerSpecified') {
+    $MailboxId | ForEach-Object {
 
-        $Progress['CurrentOperation'] = 'Getting specified EXO mailboxes'
-        Write-Progress @Progress
+        if ($PSCmdlet.ParameterSetName -eq 'CallerSpecified') {
 
-        $EXOMailboxes = foreach ($edoid in $ExternalDirectoryObjectId) {
-
-            Get-EXOMailbox -Identity $edoid -Properties DisplayName, RecipientTypeDetails, PrimarySmtpAddress, Guid, ExternalDirectoryObjectId, GrantSendOnBehalfTo
+            $currentMBX = Get-Mailbox -Identity $_.ToString() -ErrorAction Stop
         }
-    }
-
-    $Progress['CurrentOperation'] = 'Starting to process mailboxes'
-    Write-Progress @Progress
-
-    $ProcessedCounter = 0
-    $StopWatch2 = [System.Diagnostics.Stopwatch]::StartNew()
-
-    $EXOMailboxes | ForEach-Object {
+        else { $currentMBX = $_ }
 
         $ProcessedCounter++
         if ($StopWatch2.Elapsed.Milliseconds -ge 500) {
 
-            $Progress['CurrentOperation'] = "Mailbox $ProcessedCounter of $($EXOMailboxes.Count); Time elapsed: $($StopWatch1.Elapsed -replace '\..*')"
-            $Progress['PercentComplete'] = (($ProcessedCounter / $EXOMailboxes.Count) * 100)
+            if ($PSCmdlet.ParameterSetName -eq 'All') {
+
+                $Progress['CurrentOperation'] = "Mailboxes processed: $ProcessedCounter of $($MailboxId.Count); Time elapsed: $($StopWatch1.Elapsed -replace '\..*')"
+                $Progress['PercentComplete'] = ($ProcessedCounter / $MailboxId.Count) * 100
+            }
+            else {
+                $Progress['CurrentOperation'] = "Mailboxes processed: $ProcessedCounter; Time elapsed: $($StopWatch1.Elapsed -replace '\..*')"
+                $Progress['PercentComplete'] = -1
+            }
             $Progress['Status'] = 'Processing...'
-            Write-Progress @Progress
+            $ProgressPreference = 'Continue';Write-Progress @Progress
 
             $StopWatch2.Reset(); $StopWatch2.Start()
         }
-
-        $currentMBX = $_
+        
         $currentMBXPermissions = @()
         $currentMBXPermissionLookupFailures = @()
 
@@ -160,7 +160,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^FullAccess$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxPermission -Identity $currentMBX.ExternalDirectoryObjectId -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxPermission -Identity $currentMBX.ExternalDirectoryObjectId -ErrorAction Stop |
                 Where-Object {
                     $_.IsInherited -ne $true -and
                     $_.Deny -ne $true -and
@@ -168,13 +168,13 @@ process {
                     $_.User -ne 'NT AUTHORITY\SELF' -and
                     $_.User -notlike '*S-1-5*'
                 } |
-                Select-Object -Property @{Name = 'Folder'; Expression = { 'N/A' } },
+                Select-Object -Property @{Name = 'Folder'; Expression = { '#N/A' } },
                 @{Name = 'Permission'; Expression = { 'FullAccess' } },
                 User
             }
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
-                    Folder     = 'N/A'
+                    Folder     = '#N/A'
                     Permission = 'FullAccess'
                 }
             }
@@ -186,7 +186,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^SendAs$)') {
 
             try {
-                $currentMBXPermissions += Get-EXORecipientPermission -Identity $currentMBX.ExternalDirectoryObjectId -ErrorAction Stop |
+                $currentMBXPermissions += Get-RecipientPermission -Identity $currentMBX.ExternalDirectoryObjectId -ErrorAction Stop |
                 Where-Object {
                     $_.IsInherited -ne $true -and
                     $_.Deny -ne $true -and
@@ -194,13 +194,13 @@ process {
                     $_.Trustee -ne 'NT AUTHORITY\SELF' -and
                     $_.Trustee -notlike '*S-1-5*'
                 } |
-                Select-Object -Property @{Name = 'Folder'; Expression = { 'N/A' } },
+                Select-Object -Property @{Name = 'Folder'; Expression = { '#N/A' } },
                 @{Name = 'Permission'; Expression = { 'Send-As' } },
                 @{Name = 'User'; Expression = { $_.Trustee } }
             }
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
-                    Folder     = 'N/A'
+                    Folder     = '#N/A'
                     Permission = 'SendAs'
                 }
             }
@@ -216,7 +216,7 @@ process {
                 foreach ($gsobt in $currentMBX.GrantSendOnBehalfTo) {
 
                     $currentMBXPermissions += $currentMBX.GrantSendOnBehalfTo |
-                    Select-Object @{Name = 'Folder'; Expression = { 'N/A' } },
+                    Select-Object @{Name = 'Folder'; Expression = { '#N/A' } },
                     @{Name = 'Permission'; Expression = { 'Send on Behalf' } },
                     @{Name = 'User'; Expression = { $_ } }
                 }
@@ -229,7 +229,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^Calendar$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Calendar" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Calendar" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -243,7 +243,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = 'Calendar'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }
@@ -254,7 +254,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^Contacts$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Contacts" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Contacts" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -268,7 +268,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = 'Contacts'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }
@@ -279,7 +279,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^Tasks$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Tasks" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Tasks" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -293,7 +293,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = 'Tasks'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }
@@ -304,7 +304,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^\\$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -318,7 +318,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = '\'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }
@@ -329,7 +329,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^Inbox$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Inbox" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Inbox" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -343,7 +343,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = 'Inbox'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }    
@@ -354,7 +354,7 @@ process {
         if ($IncludePermissionTypes -match '(^All$)|(^CommonFolders$)|(^SentItems$)') {
 
             try {
-                $currentMBXPermissions += Get-EXOMailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Sent Items" -ErrorAction Stop |
+                $currentMBXPermissions += Get-MailboxFolderPermission -Identity "$($currentMBX.ExternalDirectoryObjectId):\Sent Items" -ErrorAction Stop |
                 Where-Object {
                     $_.User -notlike 'Default' -and
                     $_.User -notlike 'Anonymous' -and
@@ -368,7 +368,7 @@ process {
             catch {
                 $currentMBXPermissionLookupFailures += [PSCustomObject]@{
                     Folder     = 'SentItems'
-                    Permission = 'N/A'
+                    Permission = '#N/A'
                 }
             }
         }
@@ -394,25 +394,16 @@ process {
                     if ($cmp.User -like '*@*') {
 
                         $PSmtpOrName = 'UPN/PSmtp'
-                        $Recipient = Get-EXORecipient -Identity $cmp.User -Properties DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid, ExternalDirectoryObjectId -ErrorAction Stop
-                    }
-                    elseif ($cmp.User -match "'") {
-                        # This elseif{} block is temporary, see the comments in the followin else{} block (and the .Notes help section).
-                        # Do nothing, this user will be skipped in order to save on the error that it would occur due to the apostrophe in their name.
+                        $Recipient = Get-Recipient -Identity $cmp.User -ErrorAction Stop
                     }
                     else {
 
                         $PSmtpOrName = 'Name'
-                        # The following filter will not actually work in the new EXO V2 Get-EXORecipient/Get-EXOMailbox cmdlets.
-                        # Mailbox folder permission objects store the user using the Name property.
-                        # And so, you can't successfully filter for users with apostrophes in their Name anymore.
-                        # I'm leaving it here because I've reported this and have my fingers crossed it's going to work again in the future.
-                        # $Recipient = Get-EXORecipient -Filter "Name -eq '$($cmp.User -replace ""'"",""''"")'" -Properties DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid, ExternalDirectoryObjectId -ErrorAction Stop
-                        $Recipient = Get-EXORecipient -Filter "Name -eq '$($cmp.User)'" -Properties DisplayName, PrimarySmtpAddress, RecipientTypeDetails, Guid, ExternalDirectoryObjectId -ErrorAction Stop
+                        $Recipient = Get-Recipient -Filter "Name -eq '$($cmp.User)'" -ErrorAction Stop
                     }
                 }
                 catch {
-                    Write-Warning -Message "Failed on Get-EXORecipient command."
+                    Write-Warning -Message "Failed on Get-Recipient command."
                     Write-Warning -Message "Detected User ID property = $($PSmtpOrName)"
                     Write-Warning -Message "Mailbox (PSmtp) = '$($currentMBX.PrimarySmtpAddress)'"
                     Write-Warning -Message "Folder = '$($cmp.Folder)'"
@@ -476,5 +467,5 @@ process {
 }
 
 End {
-    Write-Progress @Progress -Completed
+    $ProgressPreference = 'Continue';Write-Progress @Progress -Completed
 }
