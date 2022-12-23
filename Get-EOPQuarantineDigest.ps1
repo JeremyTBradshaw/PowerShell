@@ -66,6 +66,8 @@ if (-not (Get-Command Get-QuarantineMessage -ErrorAction SilentlyContinue)) {
 #region#- Initialization and Variables #
 #======#------------------------------#
 
+$dtNow = [datetime]::Now
+
 $ht_policyTypes = @{
 
     'HostedContentFilterPolicy' = 'Anti-Spam'
@@ -73,6 +75,12 @@ $ht_policyTypes = @{
     'AntiPhishPolicy'           = 'Anti-Phish'
     'SafeAttachmentPolicy'      = 'Safe Attachments'
     'ExchangeTransportRule'     = 'Exchange Transport Rule'
+}
+
+$Progress = @{
+
+    Activity = "$($PSCmdlet.MyInvocation.MyCommand.Name) - Start time: $($dtNow)"
+    PercentComplete = -1
 }
 
 #=========#------------------------------#
@@ -89,8 +97,12 @@ $QuarantineResults = @()
 $PageNumber = 1
 $InLoopResults = @(1)
 do {
+    # Next line is to get around EXO v3.0.0 issue which sets $ProgressPreference to SilentlyContinue globally:
+    $ProgressPreference = 'Continue'
+    Write-Progress @Progress -Status "Getting quarantine messages between $($StartReceivedDate) and $($EndReceivedDate)..."
+
     $InLoopResults = @()
-    $InLoopResults += Get-QuarantineMessage -StartReceivedDate ([datetime]::Today.AddDays(-1)) -EndReceivedDate ([datetime]::Today) -PageSize 1000 -Page $PageNumber
+    $InLoopResults += Get-QuarantineMessage -StartReceivedDate $StartReceivedDate -EndReceivedDate $EndReceivedDate -PageSize 1000 -Page $PageNumber
     if ($InLoopResults.Count -ge 1) {
 
         $QuarantineResults += $InLoopResults
@@ -108,6 +120,10 @@ until ($InLoopResults.Count -eq 0)
 #======#-----------------#
 #region# Post-Processing #
 #======#-----------------#
+
+# Next line is to get around EXO v3.0.0 issue which sets $ProgressPreference to SilentlyContinue globally:
+$ProgressPreference = 'Continue'
+Write-Progress @Progress -Status "Summarizing $($QuarantineResults.Count) quarantine messages..."
 
 $ResultsForProcessing = $QuarantineResults |
 Select-Object Organization, Identity, ReceivedTime, SenderAddress, Subject, Type, ReleaseStatus, SystemReleased, Reported,
