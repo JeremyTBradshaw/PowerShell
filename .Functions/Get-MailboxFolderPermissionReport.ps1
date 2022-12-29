@@ -4,11 +4,11 @@ function Get-MailboxFolderPermissionReport {
         Get a report of assigned mailbox folder permissions for a given mailbox.
 
         .Parameter Identity
-        Treat this parameter exactly like the parameter for the Get-MailboxFolderStatistics cmdlet's -Identity parameter.
+        Treat this parameter exactly like Get-MailboxFolderStatistics cmdlet's -Identity parameter.
 
         .Parameter ReportMode
-        Summary mode outputs one permission object per folder, with columns for each permission role.  Detailed mode
-        outputs one permission object for every access right entry for every folder.
+        Summary mode outputs one permission object per folder, with columns for each permission role.  Detailed mode,
+        the default, outputs one permission object for every access right entry for every folder.
     #>
     [CmdletBinding()]
     Param (
