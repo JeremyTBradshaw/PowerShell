@@ -32,13 +32,13 @@ if (-not (Get-Command Get-Recipient, Get-DistributionGroup, Get-DistributionGrou
 
 
 
-#======#----------#
-#region Functions #
-#======#----------#
+#======#-----------#
+#region# Functions #
+#======#-----------#
 
 function getGroup ($groupId) {
     try {
-        $group = Get-Recipient -Identity "$($groupId)" -ErrorAction SilentlyContinue
+        $group = Get-Recipient -Identity "$($groupId)" -ErrorAction Stop
 
         if ($group) {
             if ($group.RecipientTypeDetails -notlike 'Mail*Group' -and $group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
@@ -59,7 +59,7 @@ function getGroupMember ($group, $Level) {
     try {
         if ($group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
     
-            Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited |
+            Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited -ErrorAction Stop |
             Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
             @{Name = 'Level'; Expression = { $Level } },
             RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
@@ -78,15 +78,15 @@ function getGroupMember ($group, $Level) {
     }
 }
 
-#=========#----------#
-#endregion Functions #
-#=========#----------#
+#=========#-----------#
+#endregion# Functions #
+#=========#-----------#
 
 
 
-#======#------------#
-#region Main Script #
-#======#------------#
+#======#-------------#
+#region# Main Script #
+#======#-------------#
 
 try {
     $ProgressSplat = @{
@@ -120,6 +120,6 @@ try {
 }
 catch { throw }
 
-#=========#------------#
-#endregion Main Script #
-#=========#------------#
+#=========#-------------#
+#endregion# Main Script #
+#=========#-------------#
