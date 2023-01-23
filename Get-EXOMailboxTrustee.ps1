@@ -213,13 +213,10 @@ process {
 
             if ($currentMBX.GrantSendOnBehalfTo) {
 
-                foreach ($gsobt in $currentMBX.GrantSendOnBehalfTo) {
-
-                    $currentMBXPermissions += $currentMBX.GrantSendOnBehalfTo |
-                    Select-Object @{Name = 'Folder'; Expression = { '#N/A' } },
-                    @{Name = 'Permission'; Expression = { 'Send on Behalf' } },
-                    @{Name = 'User'; Expression = { $_ } }
-                }
+                $currentMBXPermissions += $currentMBX.GrantSendOnBehalfTo |
+                Select-Object @{Name = 'Folder'; Expression = { '#N/A' } },
+                @{Name = 'Permission'; Expression = { 'Send on Behalf' } },
+                @{Name = 'User'; Expression = { $_ } }
             }
         }
         #endregion SendOnBehalf
@@ -379,7 +376,7 @@ process {
         foreach ($cmp in $currentMBXPermissions) {
 
             Write-Verbose -Message "Looking up trustee: '$($cmp.User)'"
-
+            Write-Debug "Troubleshoot here"
             $Recipient = $null
             if ($TrusteeTracker["$($cmp.User)"]) {
 
