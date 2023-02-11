@@ -369,7 +369,7 @@ if ($RecreateInEXO) {
         $_missingRecipients = @{}
         foreach ($_rcptListProperty in 'ManagedBy', 'ModeratedBy',
             'AcceptMessagesOnlyFromSendersOrMembers', 'RejectMessagesFromSendersOrMembers', 'BypassModerationFromSendersOrMembers',
-            'GrantSendOnBehalfTo',
+            'GrantSendOnBehalfTo', 'SendAs',
             'Members') {
 
             $_availableRecipients[$_rcptListProperty] = if ($DistributionGroup.$_rcptListProperty) {
@@ -380,13 +380,6 @@ if ($RecreateInEXO) {
                 $DistributionGroup.$($_rcptListProperty) | Where-Object { $_availableRecipients[$_rcptListProperty] -notcontains $_ }
             } else { $null }
         }
-        $_availableRecipients['SendAs'] = if ($DistributionGroup.SendAs) {
-            [string[]]@(getRecipients -List $DistributionGroup.SendAs)
-        } else { $null }
-        
-        $_missingRecipients['SendAs'] = if ($_availableRecipients['SendAs']) {
-            $DistributionGroup.SendAs | Where-Object { $_availableRecipients['SendAs'] -notcontains $_ }
-        } else { $null }
         
         # If any recipients were not found, inquire here if we should proceed:
         if ($_missingRecipients.Values.GetEnumerator().Count -gt 0) {
@@ -431,9 +424,9 @@ if ($RecreateInEXO) {
 
         # Special steps for placeholder-only mode:
         if ($PlaceholderOnly) {
-            foreach ($_uniqueProperty in 'Name', 'DisplayName', 'PrimarySmtpAddress', 'Alias') {
+            foreach ($_property in 'Name', 'DisplayName', 'PrimarySmtpAddress', 'Alias') {
                 
-                $_newDGParams[$_uniqueProperty] = "zzzTmpDLMigration_$($_newDGParams[$_uniqueProperty])"
+                $_newDGParams[$_property] = "zzzTmpDLMigration_$($_newDGParams[$_property])"
             }
             $_setDGParams['Identity'] = "zzzTmpDLMigration_$($_setDGParams['Identity'])"
         }
