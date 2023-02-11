@@ -281,7 +281,10 @@ if ($BackupFromOnPremises) {
             LegacyExchangeDN                   = $DistributionGroup.LegacyExchangeDN
         }
         # CustomAttributes:
-        foreach ($_ca in 1..15) { $DGBackup["CustomAttribute$($_ca)"] = if ($DistributionGroup.$_ca) { $DistributionGroup.$_ca } else { $null } }
+        foreach ($_ca in 1..15) {
+            $_thisCA = "CustomAttribute$($_ca)"
+            $DGBackup[$_thisCA] = if ($DistributionGroup.$_thisCA) { $DistributionGroup.$_thisCA } else { $null }
+        }
 
         # Relevant email addresses:
         $DGBackup['EmailAddresses'] = [string[]]@($DistributionGroup.EmailAddresses |
@@ -416,7 +419,10 @@ if ($RecreateInEXO) {
             ReportToOriginatorEnabled         = $DistributionGroup.ReportToOriginatorEnabled
             SendOofMessageToOriginatorEnabled = $DistributionGroup.SendOofMessageToOriginatorEnabled
         }
-        foreach ($_ca in 1..15) { if ($DistributionGroup.$_ca) { $_setDGParams["CustomAttribute$($_ca)"] = $DistributionGroup.$_ca } }
+        foreach ($_ca in 1..15) {
+            $_thisCA = "CustomAttribute$($_ca)"
+            if ($DistributionGroup.$_thisCA) { $_setDGParams[$_thisCA] = $DistributionGroup.$_thisCA }
+        }
         foreach ($_rcptListProperty in 'ManagedBy', 'ModeratedBy',
             'AcceptMessagesOnlyFromSendersOrMembers', 'RejectMessagesFromSendersOrMembers', 'GrantSendOnBehalfTo', 'BypassModerationFromSendersOrMembers') {
 
