@@ -39,8 +39,7 @@
     to be able to manually recreate the group as it was.
 
     .Parameter RecreateInEXO
-    Switch parameter to select the migrattion step of creating the group in Exchange Online.  This mode requires the
-    backup XML file produced earlier for the same group by the backup mode.
+    Switch parameter to select the migration step of creating the group in EXO.
 
     .Parameter PlaceholderOnly
     Switch parameter intended for use with the RecreateInEXO mode.  Indicates to create the group in EXO but to forego
@@ -48,7 +47,7 @@
     Alias, and PrimarySmtpAddress properties.
 
     .Parameter UpdateEXOPlaceholder
-    Switch parameter to select the migration step of finalizing the previously-created placeholder group in EXO.  The 
+    Switch parameter to select the migration step of finalizing the previously-created placeholder group in EXO.
 #>
 #Requires -PSEdition Desktop
 #Requires -Version 5.1
