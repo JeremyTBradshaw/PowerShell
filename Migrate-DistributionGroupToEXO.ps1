@@ -233,9 +233,9 @@ if ($RecreateInEXO -or $UpdateEXOPlaceholder) {
 
 
 
-#======#------------------------------------#
-#region# Backup and Delete from On-Premises #
-#======#------------------------------------#
+#======#-------------------------#
+#region# Backup from On-Premises #
+#======#-------------------------#
 if ($BackupFromOnPremises) {
     try {
         # Find and inspect the group for suitability:
@@ -318,15 +318,15 @@ if ($BackupFromOnPremises) {
     }
     catch { throw }
 
-    # We won't delete, just advise:
+    # Advise that group is ready to be un-synced:
     "Group '$($Identity)' can now be un-synced from Azure AD.  This can be done however desired (e.g., " +
     "set adminDescription to 'Group_DoNotSync', move to an un-synced OU, Disable-DistributionGroup, Remove-DistributionGroup, etc.).  " +
     "This must be done before re-creating the group in Exchange Online.  Alternatively, using the -RecreateInEXO -PlaceHolderOnly switches, " +
     "the group can be created as a placeholder in EXO before un-syncing the group." | Write-Host -ForegroundColor Green
 }
-#=========#------------------------------------#
-#endregion# Backup and Delete from On-Premises #
-#=========#------------------------------------#
+#=========#-------------------------#
+#endregion# Backup from On-Premises #
+#=========#-------------------------#
 
 
 
