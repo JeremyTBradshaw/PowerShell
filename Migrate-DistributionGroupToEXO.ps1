@@ -315,7 +315,6 @@ if ($BackupFromOnPremises) {
         else { $null ; Write-Warning -Message "No recipient-object members (i.e., mail-enabled) found in group '$($Identity)'." }
 
         # Export/backup:
-    
         $_now = [datetime]::Now; [PSCustomObject]$DGBackup |
         Export-Clixml "$($DistributionGroupBackupFolderPath)\DGBackup_$($DistributionGroup.PrimarySmtpAddress)_$($_now.ToString('yyyy-MM-dd_HH-mm-ss_z')).xml" -Depth 10 -ErrorAction Stop
     }
