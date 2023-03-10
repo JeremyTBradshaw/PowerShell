@@ -47,10 +47,11 @@
     Alias, and PrimarySmtpAddress properties.
 
     .Parameter UpdateEXOPlaceholder
-    Switch parameter to select the migration step of finalizing the previously-created placeholder group in EXO.
+    Switch parameter to select the migration step of finalizing the previously-created placeholder group in EXO, by
+    removing the "zzzTmpDLMigration_" suffix and applying the original email addresses (including X500's (including 
+    X500:<legacyExchangeDN>)).
 #>
-#Requires -PSEdition Desktop
-#Requires -Version 5.1
+#Requires -Version 4.0
 [CmdletBinding(
     SupportsShouldProcess = $true,
     ConfirmImpact = 'High'
@@ -319,11 +320,14 @@ if ($BackupFromOnPremises) {
     }
     catch { throw }
 
-    # Advise that group is ready to be un-synced:
-    "Group '$($Identity)' can now be un-synced from Azure AD.  This can be done however desired (e.g., " +
-    "set adminDescription to 'Group_DoNotSync', move to an un-synced OU, Disable-DistributionGroup, Remove-DistributionGroup, etc.).  " +
-    "This must be done before re-creating the group in Exchange Online.  Alternatively, using the -RecreateInEXO -PlaceHolderOnly switches, " +
-    "the group can be created as a placeholder in EXO before un-syncing the group." | Write-Host -ForegroundColor Green
+    if (-not $WhatIfPreference.IsPresent) {
+
+        # Advise that group is ready to be un-synced:
+        "Group '$($Identity)' can now be un-synced from Azure AD.  This can be done however desired (e.g., " +
+        "set adminDescription to 'Group_DoNotSync', move to an un-synced OU, Disable-DistributionGroup, Remove-DistributionGroup, etc.).  " +
+        "This must be done before re-creating the group in Exchange Online.  Alternatively, using the -RecreateInEXO -PlaceHolderOnly switches, " +
+        "the group can be created as a placeholder in EXO before un-syncing the group." | Write-Host -ForegroundColor Green
+    }
 }
 #=========#-------------------------#
 #endregion# Backup from On-Premises #
@@ -334,9 +338,7 @@ if ($BackupFromOnPremises) {
 #======#---------------------------------#
 #region# BACKOUT Recreate in On-Premises #
 #======#---------------------------------#
-if ($BACKOUTRecreateInOnPremises) {
-
-}
+if ($BACKOUTRecreateInOnPremises) { <# Coming soon... someday :) #> }
 #=========#---------------------------------#
 #endregion# BACKOUT Recreate in On-Premises #
 #=========#---------------------------------#
