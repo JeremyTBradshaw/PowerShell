@@ -23,7 +23,7 @@
     .\Get-MailboxFolderId -Identity 'Jeremy Bradshaw'
 
     .EXAMPLE
-    .\Get-MailboxFolderId -Identity 'Jeremy Bradshaw' -Archive -FolderScope Calendar -UserFolderPicker
+    .\Get-MailboxFolderId -Identity 'Jeremy Bradshaw' -Archive -FolderScope Calendar -UseFolderPicker
 
     .EXAMPLE
     .\Get-MailboxFolderId -ConvertId 'LgAAAACLKa67viTPS4YIWrWNWo1kAQDLk1Jju/W9TYZ8G+Dk/ONhAAAAAICvAAAB', 'LgAAAACLKa67viTPS4YIWrWNWo1kAQDLk1Jju/W9TYZ8G+Dk/ONhAAAAAICaAAAB'
