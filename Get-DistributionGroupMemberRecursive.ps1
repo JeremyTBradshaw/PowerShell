@@ -2,8 +2,9 @@
     .Synopsis
     Find distribution group members recursively, when there are nested member-groups.
 
-    .Parameter StartingGroupPSMTP
-    Specifies the PrimarySmtpAddress (ideally) for the top-level group to find members of.
+    .Parameter Identity
+    Specifies the identity for the top-level group to find members of.  This is a direct passthrough to Get-Recipient's
+    -Identity parameter.
 
     .Parameter LevelsDeepToGo
     Specifies how many levels of nesting to recurse.  Default is 10.  In case of an infinite nesting, it will be best
@@ -16,7 +17,7 @@
 [CmdletBinding()]
 param (
     [Parameter(Mandatory)]
-    [string]$StartingGroupPSMTP,
+    [string]$Identity,
 
     [int]$LevelsDeepToGo = 10,
 
@@ -95,7 +96,7 @@ try {
         PercentComplete = -1
     }
 
-    $StartingGroup = getGroup -groupId "$($StartingGroupPSMTP)"
+    $StartingGroup = getGroup -groupId "$($Identity)"
 
     $Level = if ($PSBoundParameters.ContainsKey('StartingLevelOverride')) { $StartingLevelOverride } else { 1 }
 
