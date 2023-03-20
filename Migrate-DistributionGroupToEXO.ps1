@@ -33,11 +33,6 @@
     .Parameter DistributionGroupBackupFilePath
     Specifies the file path of a previously backed-up group's XML file.  Required in all modes except backup mode.
 
-    .Parameter BACKOUTRecreateInOnPremises
-    Switch parameter to select the migration step of backing out and recreating the group on-premises.  This mode of
-    the script is not yet implemented, but the backup XML file created in the backup mode contains the necessary info
-    to be able to manually recreate the group as it was.
-
     .Parameter RecreateInEXO
     Switch parameter to select the migration step of creating the group in EXO.
 
@@ -60,9 +55,6 @@ param (
     [Parameter(ParameterSetName = 'BackupFromOnPremises')]
     [switch]$BackupFromOnPremises,
 
-    [Parameter(ParameterSetName = 'BACKOUTRecreateInOnPremises')]
-    [switch]$BACKOUTRecreateInOnPremises,
-
     [Parameter(ParameterSetName = 'RecreateInEXO')]
     [switch]$RecreateInEXO,
 
@@ -70,7 +62,6 @@ param (
     [switch]$UpdateEXOPlaceholder,
 
     [Parameter(Mandatory, ParameterSetName = 'BackupFromOnPremises')]
-    [Parameter(Mandatory, ParameterSetName = 'BACKOUTRecreateInOnPremises')]
     [string]$GlobalCatalogDomainControllerFQDN,
 
     [Parameter(Mandatory, ParameterSetName = 'BackupFromOnPremises')]
@@ -88,7 +79,6 @@ param (
     [Parameter(ParameterSetName = 'BackupFromOnPremises')]
     [string]$FallbackManagedByPSMTP,
 
-    [Parameter(Mandatory, ParameterSetName = 'BACKOUTRecreateInOnPremises')]
     [Parameter(Mandatory, ParameterSetName = 'RecreateInEXO')]
     [Parameter(Mandatory, ParameterSetName = 'UpdatePlaceholderInEXO')]
     [ValidateScript(
@@ -332,16 +322,6 @@ if ($BackupFromOnPremises) {
 #=========#-------------------------#
 #endregion# Backup from On-Premises #
 #=========#-------------------------#
-
-
-
-#======#---------------------------------#
-#region# BACKOUT Recreate in On-Premises #
-#======#---------------------------------#
-if ($BACKOUTRecreateInOnPremises) { <# Coming soon... someday :) #> }
-#=========#---------------------------------#
-#endregion# BACKOUT Recreate in On-Premises #
-#=========#---------------------------------#
 
 
 
