@@ -7,6 +7,7 @@ function writeLog {
         [string]$LogRotation = 'Secondly',
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][string]$Message,
+        [switch]$SectionStart,
         [System.Management.Automation.ErrorRecord]$ErrorRecord,
         [switch]$DisableLogging,
         [switch]$PassThru
@@ -32,7 +33,9 @@ function writeLog {
 
             $Date = [datetime]::Now.ToString('yyyy-MM-dd hh:mm:ss tt')
 
-            "[ $($Date) ] $($Message)" | Out-File -FilePath $LogFile -Append
+            $LogOutput = "[ $($Date) ] $($Message)"
+            if ($SectionStart) { $LogOutput = $LogOutput.Insert(0, "`r`n") }
+            $LogOutput | Out-File -FilePath $LogFile -Append
 
             if ($PSBoundParameters.ErrorRecord) {
 
