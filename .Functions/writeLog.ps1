@@ -3,6 +3,8 @@ function writeLog {
     param (
         [Parameter(Mandatory)][string]$LogName,
         [Parameter(Mandatory)][datetime]$LogDateTime,
+        [ValidateSet('Daily', 'Secondly')]
+        [string]$LogRotation = 'Secondly',
         [Parameter(Mandatory)][System.IO.FileInfo]$Folder,
         [Parameter(Mandatory, ValueFromPipeline, ValueFromPipelineByPropertyName)][string]$Message,
         [System.Management.Automation.ErrorRecord]$ErrorRecord,
@@ -17,7 +19,12 @@ function writeLog {
                 [void](New-Item -Path $Folder -ItemType Directory -ErrorAction Stop)
             }
 
-            $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss')).log"
+            $Rotation = switch ($LogRotation) {
+
+                Secondly { $LogDateTime.ToString('yyyy-MM-dd_HH-mm-ss') }
+                Daily { $LogDateTime.ToString('yyyy-MM-dd') }
+            }
+            $LogFile = Join-Path -Path $Folder -ChildPath "$($LogName)_$($Rotation).log"
             if (-not (Test-Path $LogFile)) {
 
                 [void](New-Item -Path $LogFile -ItemType:File -ErrorAction Stop)
