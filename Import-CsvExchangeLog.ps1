@@ -47,3 +47,4 @@ process {
     }
     catch { throw }
 }
+end { Write-Progress @Progress -Completed }
