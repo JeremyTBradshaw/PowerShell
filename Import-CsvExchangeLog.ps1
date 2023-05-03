@@ -19,15 +19,16 @@ param (
 begin {
     $StartTime = [datetime]::Now
     $StopWatch = [System.Diagnostics.Stopwatch]::StartNew()
+    $Progress = @{
+        Activity = "Import-CsvExchangeLog.ps1 - Start time: $($StartTime)"
+        PercentComplete = -1
+    }
 }
 process {
     try {
         if ($StopWatch.ElapsedMilliseconds -ge 200) {
-            $Progress = @{
-                Activity = "Import-CsvExchangeLog.ps1 - Start time: $($StartTime)"
-                PercentComplete = -1
-                Status = "Importing CSV: $($LogFilePath)"
-            }
+            
+            $Progress['Status'] = "Importing CSV: $($LogFilePath)"
             Write-Progress @Progress
             $StopWatch.Restart()
         }
