@@ -2,10 +2,6 @@
     .SYNOPSIS
     Script file for launching HealthChecker.ps1 via Task Scheduler, and from within the same directory.
 
-    .PARAMETER ExchangeServers
-    Specifies one or more Exchange server names/FQDNs to target with HealthChecker.ps1.  This is a pass-through to
-    HealthChecker.ps1's -Server Parameter.  Optionally, update the parameter's default value witin the param() block.
-
     .DESCRIPTION
     This script is intended for use by a Windows Task Scheduler task where the Action as configured as follows:
     - Action: Start a program
@@ -22,15 +18,19 @@
     script root folder will then contain the following items:
 
     <PSScriptRoot>
-      - HealthChecker.ps1 #<--: official script (Version 23.05.15.1908 or newer recommended or HTML report will land in script caller's $PWD.
+      - HealthChecker.ps1 #<--: official script (Version 23.05.15.1908 or newer recommended or HTML report will land in script caller's $PWD).
       - HealthChecker.runHelper.ps1 #<--: This script file.
       - HealthChecker.runHelper_Logs #<--: Folder containing a daily log file.  Modify 'LogRotation' in Initialization and Variables region's #1 to be 'Secondly' for a separate log file for every execution of this script.
       - HealthChecker.ps1_Outputs #<--: Folder containing server TXT/XML files, debug log, and other outputs from HealthChecker.ps1, saved in dedicated subfolders for each execution of this script.
       - HealthChecker_Report_2023-05-17T10-25-51.html #<--: The actual HTML reports will be dropped here, named after date/time to prevent overwriting earlier reports.
-    
+
+    .PARAMETER ExchangeServers
+    Specifies one or more Exchange server names/FQDNs to target with HealthChecker.ps1.  This is a pass-through to
+    HealthChecker.ps1's -Server Parameter.  Optionally, update the parameter's default value witin the param() block.
+
     .NOTES
     Author: Jeremy Bradshaw (Jeremy.Bradshaw@Outlook.com)
-    WhenChanged: 2023-05-17 11:50 AM (Atlantic Standard Time)
+    WhenChanged: 2023-05-17 12:00 PM (Atlantic Standard Time)
 
     .LINK
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/HealthChecker.runHelper.ps1
@@ -39,13 +39,17 @@
     https://microsoft.github.io/CSS-Exchange/
 
     .LINK
+    https://microsoft.github.io/CSS-Exchange/Diagnostics/HealthChecker/RunHCViaSchedTask/
+
+    .LINK
     https://github.com/microsoft/CSS-Exchange/releases/latest/download/HealthChecker.ps1
 #>
 #Requires -Version 4
 [CmdletBinding()]
 param (
-    [string[]]$ExchangeServers = @('exampleExSvr1','exampleExSvr2')
+    [string[]]$ExchangeServers = @('exampleExSvr1', 'exampleExSvr2')
 )
+
 #======#-----------#
 #region# Functions #
 #======#-----------#
@@ -111,6 +115,7 @@ function writeLog {
 #=========#-----------#
 #endregion# Functions #
 #=========#-----------#
+
 
 try {
     #======#------------------------------#
