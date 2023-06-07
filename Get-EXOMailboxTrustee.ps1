@@ -20,10 +20,10 @@
 
     .Example
     Get-Mailbox Conference* | .\Get-EXOMailboxTrustee.ps1
-    
+
     .Example
     .\Get-EXOMailboxTrustee.ps1 -All -IncludePermissionTypes FullAccess, SendAs
-    
+
     .Example
     .\Get-EXOMailboxTrustee.ps1 -ExternalDirectoryObjectId 12345678-1234-1234-123456789012 -IncludePermissionTypes CommonFolders.
 
@@ -37,7 +37,7 @@
 
     For example:
     [PS]\> Get-Mailbox test* | .Get-EXOMailboxTrustee.ps1
-    
+
     MailboxDisplayName               : Test User 1
     MailboxPrimarySmtpAddress        : TestUser1@jb365ca.onmicrosoft.com
     MailboxRecipientTypeDetails      : UserMailbox
@@ -52,9 +52,15 @@
     TrusteeExternalDirectoryObjectId : 72943358-59b4-45f7-bd3c-4407bcd2363f
 
     .Notes
-    As of 2022-12-19, anywhere that Write-Progress is used, it is preceded with $ProgressPreference = 'Continue'.
+     -  As of 2022-12-19, anywhere that Write-Progress is used, it is preceded with $ProgressPreference = 'Continue'.
     This is due to an issue with the ExchangeOnlineManagement module where it sets the global variable to
     'SilentlyContinue', hiding all progress.
+
+     - As of 2023-06-07, FullAccess, Send-As, and Send-on-Behalf permissions are stored on mailbox objects in an
+    undocumented way.  FullAccess/Send-As trustees are stored as their UserPrincipalName.  Send-on-Behalf trustees are
+    stored as their Name/cn property value, I think**.  The following TechCommunity thread has been opened to discuss:
+    https://techcommunity.microsoft.com/t5/exchange/exo-s-quot-user-quot-and-quot-trustee-quot-properties-returned/m-p/3834679#M11590
+    Until this is sorted out concretely, I'm using Get-Recipient to filter by UPN or Name, when finding the Trustees.
 #>
 #Requires -Version 5.1
 #Requires -Modules @{ModuleName = 'ExchangeOnlineManagement'; ModuleVersion = '3.0.0'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'}
@@ -91,14 +97,14 @@ begin {
         Status           = '...'
         CurrentOperation = "Initializing"
     }
-    $ProgressPreference = 'Continue';Write-Progress @Progress
+    $ProgressPreference = 'Continue'; Write-Progress @Progress
 
     $_requiredCommands = @(
         'Get-Mailbox', 'Get-Recipient',
         'Get-MailboxPermission', 'Get-RecipientPermission', 'Get-MailboxFolderPermission'
     )
     if (-not (Get-Command $_requiredCommands -ErrorAction SilentlyContinue)) {
-        
+
         throw "This script requires an active connection with v3.0.0 or newer of the ExchangeOnlineManagement module (i.e., Connect-ExchangeOnline).  " +
         "Once connected, the following commands are required to be available: $($_requiredCommands -join ', ')"
     }
@@ -106,11 +112,11 @@ begin {
     if ($PSCmdlet.ParameterSetName -eq 'All') {
 
         $Progress['CurrentOperation'] = 'Getting all EXO mailboxes'
-        $ProgressPreference = 'Continue';Write-Progress @Progress
+        $ProgressPreference = 'Continue'; Write-Progress @Progress
 
         $MailboxId = @(Get-Mailbox -ResultSize Unlimited -ErrorAction Stop)
     }
-    
+
     if (-not ($PSBoundParameters.ContainsKey('IncludePermissionTypes'))) {
 
         $IncludePermissionTypes = 'All'
@@ -121,7 +127,7 @@ begin {
     $StopWatch2 = [System.Diagnostics.Stopwatch]::StartNew()
 
     $Progress['CurrentOperation'] = 'Starting to process mailboxes'
-    $ProgressPreference = 'Continue';Write-Progress @Progress
+    $ProgressPreference = 'Continue'; Write-Progress @Progress
 }
 
 process {
@@ -147,11 +153,11 @@ process {
                 $Progress['PercentComplete'] = -1
             }
             $Progress['Status'] = 'Processing...'
-            $ProgressPreference = 'Continue';Write-Progress @Progress
+            $ProgressPreference = 'Continue'; Write-Progress @Progress
 
             $StopWatch2.Reset(); $StopWatch2.Start()
         }
-        
+
         $currentMBXPermissions = @()
         $currentMBXPermissionLookupFailures = @()
 
@@ -244,7 +250,7 @@ process {
                 }
             }
         }
-        #endregion Calendar    
+        #endregion Calendar
 
         #region Contacts
 
@@ -343,7 +349,7 @@ process {
                     Permission = '#N/A'
                 }
             }
-        }    
+        }
         #endregion Inbox
 
         #region SentItems
@@ -390,8 +396,8 @@ process {
 
                     if ($cmp.User -like '*@*') {
 
-                        $PSmtpOrName = 'UPN/PSmtp'
-                        $Recipient = Get-Recipient -Identity $cmp.User -ErrorAction Stop
+                        $PSmtpOrName = 'UPN/PSMTP'
+                        $Recipient = Get-Recipient -Filter "PrimarySmtpAddress -eq '$($cmp.User)' -or UserPrincipalName -eq '$($cmp.User)'" -ErrorAction Stop
                     }
                     else {
 
@@ -402,7 +408,7 @@ process {
                 catch {
                     Write-Warning -Message "Failed on Get-Recipient command."
                     Write-Warning -Message "Detected User ID property = $($PSmtpOrName)"
-                    Write-Warning -Message "Mailbox (PSmtp) = '$($currentMBX.PrimarySmtpAddress)'"
+                    Write-Warning -Message "Mailbox (PSMTP) = '$($currentMBX.PrimarySmtpAddress)'"
                     Write-Warning -Message "Folder = '$($cmp.Folder)'"
                     Write-Warning -Message "Permission = '$($cmp.Permission)'"
                     Write-Warning -Message "`$cmp.User = '$($cmp.User)'"
@@ -416,7 +422,7 @@ process {
                 else {
                     $TrusteeTracker["$($cmp.User)"] = [PSCustomObject]@{
                         DisplayName               = "Unknown ('User' value = $($cmp.User))"
-                        PrimarySmtpAddress        = 'Not found or ambiguous'                      
+                        PrimarySmtpAddress        = 'Not found or ambiguous'
                         RecipientTypeDetails      = 'Not found or ambiguous'
                         Guid                      = 'Not found or ambiguous'
                         ExternalDirectoryObjectId = 'Not found or ambiguous'
@@ -464,5 +470,5 @@ process {
 }
 
 End {
-    $ProgressPreference = 'Continue';Write-Progress @Progress -Completed
+    $ProgressPreference = 'Continue'; Write-Progress @Progress -Completed
 }
