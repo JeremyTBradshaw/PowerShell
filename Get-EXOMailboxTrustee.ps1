@@ -402,7 +402,7 @@ process {
                     else {
 
                         $PSmtpOrName = 'Name'
-                        $Recipient = Get-Recipient -Filter "Name -eq '$($cmp.User)'" -ErrorAction Stop
+                        $Recipient = Get-Recipient -Identity $($cmp.User) -ErrorAction Stop
                     }
                 }
                 catch {
