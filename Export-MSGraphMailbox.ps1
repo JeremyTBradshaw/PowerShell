@@ -117,23 +117,18 @@ begin {
         }
 
         foreach ($requiredScope in $requiredScopes) {
-            if ($mgContext.Scopes -notcontains $requiredScope) { $missingScopes += $requiredScope }
+            if ($mgContext.Scopes -notcontains $requiredScope) { $Script:missingScopes += $requiredScope }
         }
         if ($missingScopes) {
             throw "For the chosen export target, your session with Microsoft Graph requires the following scopes " +
             "(in addition to either of the Mail.ReadWrite or Mail.ReadWrite.All scopes): $($missingScopes -join ', ')."
         }
-        if ($requiredModules) {
-            # Insist on PowerShellGet version 2.0.0 or later, for the -AllowPrerelease parameter:
-            if (-not (Get-Module PowerShellGet -ListAvailable | Where-Object { $_.Version.Major -ge 2 })) {
-                throw "This script requires PowerShellGet version 2.0.0 or later.  Please update PowerShellGet and try again. " +
-                "To update, try: Install-Module PowerShellGet -Scope CurrentUser -Force -AllowClobber.  Will need to restart PowerShell."
-            }
-            foreach ($requiredModule in $requiredModules) {
-                if (-not (Get-Module $requiredModule -ListAvailable | Where-Object { $_.Version.Major -ge 2 })) {
-                    Install-Module $requiredModule -Scope CurrentUser -Force -AllowClobber -AllowPrerelease -MinimumVersion 2.0.0-rc3 -ErrorAction Stop
-                }
-            }
+
+        foreach ($requiredModule in $requiredModules) {
+            if (-not (Get-Module $requiredModule -ListAvailable | Where-Object { $_.Version.Major -ge 2 })) { $Script:missingModules += $requiredModule }
+        }
+        if ($missingModules) {
+            throw "For the chosen export target, you must install the following modules (v2.0.0-rc3 or later): $($missingModules -join ', ')."
         }
     }
 }
