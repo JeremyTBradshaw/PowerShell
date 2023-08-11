@@ -374,7 +374,10 @@ process {
                 default {
                     # Folder Permissions, in EXO the trustee/user are stored as nested rich objects.
                     try {
-                        $Recipient = Get-Recipient -Identity $cmp.User.RecipientPrincipal.Guid.Guid -ErrorAction Stop
+                        if ($cmp.User.RecipientPrincipal) {
+
+                            $Recipient = Get-Recipient -Identity $cmp.User.RecipientPrincipal.Guid.Guid -ErrorAction Stop
+                        }
                     }
                     catch {
                         Write-Warning -Message "Failed on Get-Recipient command."
