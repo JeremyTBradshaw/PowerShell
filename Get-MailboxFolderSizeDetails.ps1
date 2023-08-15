@@ -22,7 +22,8 @@ param (
         'Journal', 'LegacyArchiveJournals', 'ManagedCustomFolder', 'NonIpmRoot', 'Notes', 'Outbox', 'Personal',
         'RecoverableItems', 'RssSubscriptions', 'SentItems', 'SyncIssues', 'Tasks'
     )]
-    [string]$FolderScope = 'All'
+    [string]$FolderScope = 'All',
+    [switch]$IncludeOldestAndNewestItems
 )
 begin {
     if ((Get-Command Get-MailboxFolderStatistics, Get-Recipient -ErrorAction SilentlyContinue).Count -ne 2) {
@@ -47,7 +48,15 @@ process {
         $Script:progress.CurrentOperation = "Resource: $($Identity[0]) - Get-MailboxStatistics..."
         Write-Progress @progress
 
-        $mailboxFolderStats = Get-MailboxFolderStatistics -Identity $Identity[0] -IncludeAnalysis -FolderScope:$FolderScope -Archive:$Archive -ErrorAction Stop
+        $getMailboxFolderStatsParams = @{
+            Identity                    = $Identity[0]
+            FolderScope                 = $FolderScope
+            Archive                     = $Archive
+            IncludeAnalysis             = $true
+            IncludeOldestAndNewestItems = $IncludeOldestAndNewestItems
+            ErrorAction                 = 'Stop'
+        }
+        $mailboxFolderStats = Get-MailboxFolderStatistics @getMailboxFolderStatsParams
 
         $folderCounter = 0
         foreach ($folder in $mailboxFolderStats) {
@@ -65,15 +74,15 @@ process {
             [int64]$FolderAndSubfolderSize = $folder.FolderAndSubfolderSize -replace '(.*\()|,|(\s.*)'
             [int64]$TopSubjectSize = $folder.TopSubjectSize -replace '(.*\()|,|(\s.*)'
 
-            [PSCustomObject]@{
+            $folderOutput = [PSCustomObject]@{
                 Name                       = $folder.Name
                 FolderPath                 = $folder.FolderPath
                 FolderSizeGB               = [math]::Round(($FolderSize / 1GB), 2)
                 ItemsInFolder              = $folder.ItemsInFolder
-                AvgItemSizeMB              = [math]::Round((($FolderSize / [int64]::Max(1, $folder.ItemsInFolder)) / 1MB), 1)
+                AvgItemSizeMB              = [math]::Round((($FolderSize / [math]::Max(1, $folder.ItemsInFolder)) / 1MB), 1)
                 ItemsInFolderAndSubfolders = $folder.ItemsInFolderAndSubfolders
                 FolderAndSubfolderSizeGB   = [math]::Round(($FolderAndSubfolderSize / 1GB), 2)
-                TopSubjectSizeMB           = [math]::Round((($TopSubjectSize / [int64]::Max(1, $folder.TopSubjectCount)) / 1MB), 1)
+                TopSubjectSizeMB           = [math]::Round((($TopSubjectSize / [math]::Max(1, $folder.TopSubjectCount)) / 1MB), 1)
                 TopSubjectTotalSizeGB      = [math]::Round(($TopSubjectSize / 1GB), 2)
                 TopSubjectClass            = $folder.TopSubjectClass
                 TopSubjectCount            = $folder.TopSubjectCount
@@ -81,6 +90,18 @@ process {
                 RecoverableItemsFolder     = $folder.RecoverableItemsFolder
                 FolderId                   = $folder.FolderId
             }
+            if ($IncludeOldestAndNewestItems) {
+                $folderOutput |
+                Add-Member -NotePropertyName NewestItemLastModifiedDate -NotePropertyValue $folder.NewestItemLastModifiedDate -PassThru |
+                Add-Member -NotePropertyName NewestItemReceivedDate -NotePropertyValue $folder.NewestItemReceivedDate -PassThru |
+                Add-Member -NotePropertyName OldestItemLastModifiedDate -NotePropertyValue $folder.OldestItemLastModifiedDate -PassThru |
+                Add-Member -NotePropertyName OldestItemReceivedDate -NotePropertyValue $folder.OldestItemReceivedDate -PassThru |
+                Add-Member -NotePropertyName NewestDeletedItemLastModifiedDate -NotePropertyValue $folder.NewestDeletedItemLastModifiedDate -PassThru |
+                Add-Member -NotePropertyName NewestDeletedItemReceivedDate -NotePropertyValue $folder.NewestDeletedItemReceivedDate -PassThru |
+                Add-Member -NotePropertyName OldestDeletedItemLastModifiedDate -NotePropertyValue $folder.OldestDeletedItemLastModifiedDate -PassThru |
+                Add-Member -NotePropertyName OldestDeletedItemReceivedDate -NotePropertyValue $folder.OldestDeletedItemReceivedDate
+            }
+            $folderOutput
         }
     }
     catch {
