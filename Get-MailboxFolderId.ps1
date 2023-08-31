@@ -10,6 +10,9 @@
 
     .PARAMETER FolderScope
     Narrows the scope of which folders to list.  Pass-through parameter for Get-MailboxFolderStatistics.
+Get
+    .PARAMETER IncludeSoftDeletedRecipients
+    Pass-through parameter for Get-MailboxFolderStatistics.
 
     .PARAMETER UseFolderPicker
     Invoke's Out-Gridview to enable specifc folder selections.
@@ -36,36 +39,27 @@
     $ContentMatchQuery = "(c:c)(kind=meetings)(subjecttitle=""Dancy Party for Lunch"" NOT ((folderid:" + $($FolderIds.FolderId -join ') OR (folderid:') + "))"
     # ^^ Produces a query to exclude all RecoverableItems folders (minus Deletions folder), similar to the following:
     # (c:c)(kind=meetings)(subjecttitle="Dancy Party for Lunch" NOT ((folderid:cb935263bbf5bd4d867c1be0e4fce36100000000010d0000) OR (folderid:cb935263bbf5bd4d867c1be0e4fce36100001323a6b00000) OR (folderid:cb935263bbf5bd4d867c1be0e4fce36100001323a6b10000))
-
-    .NOTES
-    Author: Jeremy Bradshaw (Jeremy.Bradshaw@Outlook.com)
-    Version: 1.0 (2023-03-10 1:00PM (-04:00))
 #>
 #Requires -Version 4.0
 [CmdletBinding(DefaultParameterSetName = 'FindFolders')]
 param (
-    [Parameter(ParameterSetName = 'FindFolders', Mandatory, HelpMessage = "Refer to documentation for Get-MailboxFolderStatistics' -Identity parameter.")]
-    [Parameter(ParameterSetName = 'FindFoldersWithPicker', Mandatory, HelpMessage = "Refer to documentation for Get-MailboxFolderStatistics' -Identity parameter.")]
+    [Parameter(Mandatory, HelpMessage = 'ExchangeGuid,DistinguishedName are good choices here, especially with SoftDeleted/Inactive mailboxes.')]
     [string]$Identity,
 
-    [Parameter(ParameterSetName = 'FindFolders')]
-    [Parameter(ParameterSetName = 'FindFoldersWithPicker')]
     [switch]$Archive,
 
-    [Parameter(ParameterSetName = 'FindFolders', HelpMessage = "Refer to documentation for Get-MailboxFolderStatistics' -FolderScope parameter.")]
-    [Parameter(ParameterSetName = 'FindFoldersWithPicker', HelpMessage = "Refer to documentation for Get-MailboxFolderStatistics' -FolderScope parameter.")]
     [ValidateSet('All', 'Archive', 'Calendar', 'Contacts', 'ConversationHistory', 'DeletedItems', 'Drafts', 'Inbox', 'JunkEmail', 'Journal', 'LegacyArchiveJournals',
         'ManagedCustomFolder', 'NonIpmRoot', 'Notes', 'Outbox', 'Personal', 'RecoverableItems', 'RssSubscriptions', 'SentItems', 'SyncIssues', 'Tasks')]
     [string]$FolderScope = 'All',
+
+    [switch]$IncludeSoftDeletedRecipients,
 
     [Parameter(ParameterSetName = 'FindFoldersWithPicker')]
     [switch]$UseFolderPicker,
 
     [Parameter(ParameterSetName = 'ConvertId')]
     [ValidateScript(
-        {
-            if ($_.Length -ne 64) { throw "FolderId '$($_)' is invalid.  Supply one or more FolderId values as returned from Get-MailboxFolderStatistics." } else { $true }
-        }
+        { if ($_.Length -ne 64) { throw "FolderId '$($_)' is invalid.  Supply one or more FolderId values as returned from Get-MailboxFolderStatistics." } else { $true } }
     )]
     [string[]]$ConvertId
 )
@@ -126,7 +120,7 @@ function getFolderId ([string]$EncodedFolderId) {
 
 if ('FindFolders', 'FindFoldersWithPicker' -contains $PSCmdlet.ParameterSetName) {
     try {
-        $FolderStatistics = Get-MailboxFolderStatistics $Identity -FolderScope $FolderScope -Archive:$Archive -ErrorAction Stop
+        $FolderStatistics = Get-MailboxFolderStatistics $Identity -FolderScope $FolderScope -Archive:$Archive -IncludeSoftDeletedRecipients:$IncludeSoftDeletedRecipients -ErrorAction Stop
         $SelectedFolders = if ($UseFolderPicker) {
 
             $FolderStatistics | Select-Object FolderPath, FolderAndSubFolderSize, ItemsInFolderAndSubFolders, FolderId |
@@ -136,11 +130,11 @@ if ('FindFolders', 'FindFoldersWithPicker' -contains $PSCmdlet.ParameterSetName)
         else { $FolderStatistics }
 
         foreach ($folder in $SelectedFolders) {
-            
+
             getFolderId -EncodedFolderId $folder.FolderId | Select-Object @{Name = 'FolderPath'; Expression = { $folder.FolderPath } }, FolderId
         }
     }
-    catch { throw }    
+    catch { throw }
 }
 
 #=========#------------------------#
@@ -154,7 +148,7 @@ if ('FindFolders', 'FindFoldersWithPicker' -contains $PSCmdlet.ParameterSetName)
 #======#---------------------------------------#
 
 if ($PSCmdlet.ParameterSetName -eq 'ConvertId') {
-    
+
     foreach ($id in $ConvertId) {
         try {
             getFolderId -EncodedFolderId $id | Select-Object @{Name = 'EncodedFolderId'; Expression = { $id } }, FolderId

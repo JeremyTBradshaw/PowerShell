@@ -1,15 +1,28 @@
 <#
-    .Synopsis
+    .SYNOPSIS
     Get a report of assigned mailbox folder permissions for a given mailbox.
 
-    .Parameter Identity
+    .PARAMETER Identity
     Treat this parameter exactly like Get-MailboxFolderStatistics cmdlet's -Identity parameter.
-
-    .Parameter ReportMode
+d
+    .PARAMETER ReportMode
     Summary mode outputs one permission object per folder, with columns for each permission role.  Detailed mode,
     the default, outputs one permission object for every access right entry for every folder.
 
-    .Parameter ExportCSVs
+    .PARAMETER ResultSize
+    This allows for overriding the default behavior (-ResultSize Unlimited), if/when need (e.g., very large mailboxes).
+
+    .PARAMETER ExportCSVs
+    Exports 2 CSV files (1 for each report type (Summary/Detailed).
+
+    .PARAMETER OutputFolderPath
+    Specify a folder to override the default location of the CSV files, which is $PWD.
+
+    .PARAMETER ShowIEQDuplicateFolderIds
+    FolderIds are encoded in a case-sensitive format.  If we disregard case, there are often many duplicate FolderIds.
+    This switch will simply trigger a warning in PowerShell to point these folders out.  They should be targeted by
+    Folder name/path rather than by FolderId when using Get-/Set-/Add-/Remove-MailboxFolderPermission, or unexpected
+    information/changes may be produced.
 #>
 [CmdletBinding(DefaultParameterSetName = 'NoExport')]
 Param (
