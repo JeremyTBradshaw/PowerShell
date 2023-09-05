@@ -134,16 +134,16 @@ process {
 
             if (($ReportMode -eq 'Detailed') -or ($PSCmdlet.ParameterSetName -eq 'ExportCSVs')) {
                 foreach ($perm in $Permissions) {
-                    [PSCustomObject]@{
+                    $Details = [PSCustomObject]@{
                         Folder          = $folder.FolderPath
                         User            = $perm.User
                         AccessRights    = $perm.AccessRights
                         SharingFlags    = $perm.SharingFlags -join ', '
                         MailboxIdentity = $Identity
                         FolderId        = $folder.FolderId
-                    } |
-                    Tee-Object -Variable _detailedOutput
-                    if ($PSCmdlet.ParameterSetName -eq 'ExportCSVs') { $_detailedOutput | Export-Csv -Path $DetailedCSVFile -Append -NTI -Encoding utf8 -ea Stop }
+                    }
+                    if ($ReportMode -eq 'Detailed') { $Details }
+                    else { $Details | Export-Csv -Path $DetailedCSVFile -Append -NTI -Encoding utf8 -ea Stop }
                 }
             }
         }
