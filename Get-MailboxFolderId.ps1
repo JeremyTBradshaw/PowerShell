@@ -43,18 +43,21 @@ Get
 #Requires -Version 4.0
 [CmdletBinding(DefaultParameterSetName = 'FindFolders')]
 param (
-    [Parameter(Mandatory, HelpMessage = 'ExchangeGuid,DistinguishedName are good choices here, especially with SoftDeleted/Inactive mailboxes.')]
+    [Parameter(Mandatory, ParameterSetName = 'FindFolders', HelpMessage = 'ExchangeGuid,DistinguishedName are good choices here, especially with SoftDeleted/Inactive mailboxes.')]
     [string]$Identity,
 
+    [Parameter(ParameterSetName = 'FindFolders')]
     [switch]$Archive,
 
+    [Parameter(ParameterSetName = 'FindFolders')]
     [ValidateSet('All', 'Archive', 'Calendar', 'Contacts', 'ConversationHistory', 'DeletedItems', 'Drafts', 'Inbox', 'JunkEmail', 'Journal', 'LegacyArchiveJournals',
         'ManagedCustomFolder', 'NonIpmRoot', 'Notes', 'Outbox', 'Personal', 'RecoverableItems', 'RssSubscriptions', 'SentItems', 'SyncIssues', 'Tasks')]
     [string]$FolderScope = 'All',
 
+    [Parameter(ParameterSetName = 'FindFolders')]
     [switch]$IncludeSoftDeletedRecipients,
 
-    [Parameter(ParameterSetName = 'FindFoldersWithPicker')]
+    [Parameter(ParameterSetName = 'FindFolders')]
     [switch]$UseFolderPicker,
 
     [Parameter(ParameterSetName = 'ConvertId')]
@@ -118,7 +121,7 @@ function getFolderId ([string]$EncodedFolderId) {
 #region# Scenario: Find Folders #
 #======#------------------------#
 
-if ('FindFolders', 'FindFoldersWithPicker' -contains $PSCmdlet.ParameterSetName) {
+if ($PSCmdlet.ParameterSetName -eq 'FindFolders') {
     try {
         $FolderStatistics = Get-MailboxFolderStatistics $Identity -FolderScope $FolderScope -Archive:$Archive -IncludeSoftDeletedRecipients:$IncludeSoftDeletedRecipients -ErrorAction Stop
         $SelectedFolders = if ($UseFolderPicker) {
