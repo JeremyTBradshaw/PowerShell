@@ -63,7 +63,7 @@ begin {
     function getGroupMember ($group, $Level) {
         try {
             if ($group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
-    
+
                 Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited -ErrorAction Stop |
                 Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
                 @{Name = 'Level'; Expression = { $Level } },
@@ -107,23 +107,23 @@ process {
         $Level = if ($PSBoundParameters.ContainsKey('StartingLevelOverride')) { $StartingLevelOverride } else { 1 }
 
         Write-Progress @Progress -Status "Finding level $($Level) members"
-    
-        try { $Members = @(getGroupMember -group $StartingGroup -Level 1) }
+
+        try { $Members = @(getGroupMember -group $StartingGroup -Level $Level) }
         catch { Write-Warning $_; return }
-        
+
         do {
             $ParentLevel = $Level
             $Level++
             foreach ($g in ($Members | Where-Object { $_.Level -eq $ParentLevel -and ($_.RecipientTypeDetails -like 'Mail*Group' -or $_.RecipientTypeDetails -eq 'DynamicDistributionGroup') })) {
-    
+
                 Write-Progress @Progress -Status "Finding members of level $($ParentLevel) member groups"
-    
+
                 try { $Members += getGroupMember -group (getGroup -groupId $g.Guid.ToString()) -Level $Level }
                 catch { Write-Warning $_; return }
             }
         }
         until ($Level -eq $LevelsDeepToGo)
-    
+
         # Output all members:
         $Members
     }
