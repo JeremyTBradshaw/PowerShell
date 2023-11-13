@@ -128,7 +128,7 @@ process {
                     'MailboxIdentity'  = $Identity
                     'FolderId'         = $folder.FolderId
                 }
-                if ($ReportMode -eq 'Summary') { $Summary }
+                if ($PSCmdlet.ParameterSetName -eq 'NoExport') { $Summary }
                 else { $Summary | Export-Csv -Path $SummaryCSVFile -Append -NTI -Encoding utf8 -ea Stop }
             }
 
@@ -142,7 +142,7 @@ process {
                         MailboxIdentity = $Identity
                         FolderId        = $folder.FolderId
                     }
-                    if ($ReportMode -eq 'Detailed') { $Details }
+                    if ($PSCmdlet.ParameterSetName -eq 'NoExport') { $Details }
                     else { $Details | Export-Csv -Path $DetailedCSVFile -Append -NTI -Encoding utf8 -ea Stop }
                 }
             }
