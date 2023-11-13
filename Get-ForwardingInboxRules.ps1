@@ -8,19 +8,35 @@
 try {
     $Mailboxes = Get-Mailbox -ResultSize Unlimited -ea:Stop
     foreach ($mbx in $Mailboxes) {
-
-        $_rules = $null; $_rules = Get-InboxRule -Mailbox $mbx.PrimarySmtpAddress.ToString() -ea:SilentlyContinue |
+        $_rules = $null;
+        $_rules = Get-InboxRule -Mailbox $mbx.PrimarySmtpAddress.ToString() -ea:SilentlyContinue |
         Where-Object { $_.ForwardTo -or $_.RedirectTo }
+        
         if ($_rules) { 
             foreach ($_rule in $_rules) {
-                [PSCustomObject]@{
-                    mbxDisplayName        = $mbx.DisplayName
-                    mbxPrimarySmtpAddress = $mbx.PrimarySmtpAddress
-                    ruleIdentity          = $_rule.Identity
-                    ruleEnabled           = $_rule.Enabled
-                    ruleDescription       = $_rule.Description
-                    ruleForwardTo         = $_rule.ForwardTo
-                    ruleRedirectTo        = $_rule.RedirectTo
+                foreach ($_fwd in $_rule.ForwardTo) {
+                    [PSCustomObject]@{
+                        mbxDisplayName           = $mbx.DisplayName
+                        mbxPrimarySmtpAddress    = $mbx.PrimarySmtpAddress
+                        ruleIdentity             = $_rule.Identity
+                        ruleEnabled              = $_rule.Enabled
+                        ruleDescription          = $_rule.Description
+                        ForwardOrRedirect        = 'Forward'
+                        ruleForwardToAddr        = $_fwd.Address
+                        ruleForwardToRoutingType = $_fwd.RoutingType
+                    }
+                }
+                foreach ($_rdr in $_rule.RedirectTo) {
+                    [PSCustomObject]@{
+                        mbxDisplayName           = $mbx.DisplayName
+                        mbxPrimarySmtpAddress    = $mbx.PrimarySmtpAddress
+                        ruleIdentity             = $_rule.Identity
+                        ruleEnabled              = $_rule.Enabled
+                        ruleDescription          = $_rule.Description
+                        ForwardOrRedirect        = 'Redirect'
+                        ruleForwardToAddr        = $_rdr.Address
+                        ruleForwardToRoutingType = $_rdr.RoutingType
+                    }
                 }
             }
         }
