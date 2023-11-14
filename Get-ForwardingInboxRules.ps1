@@ -5,10 +5,10 @@
     .DESCRIPTION
     Outputs all Inbox Rules (a.k.a., Outlook rules) where ForwardTo, FowardAsAttachmentTo, or RedirectTrue are defined.
     Regardless of which action it is (or are, if multiple), an individual object is output for each target recipient.
-    The output objects are commonized, and a property - ForwardOrRedirect - will show which type it is.  The 
+    The output objects are commonized, and a property - ForwardOrRedirect - will show which type it is.  The
     RoutingType property of the target recipient is the one which reveals whether it is an internal (RoutingType = 'EX')
     or external (RoutingType 'SMTP').
-    
+
     The intent is to help with planning for external forwarding, as it relates to EOP Outbound spam protection policies,
     remote domains, and transport rules.  See the referenced Exchange Team blog post in the .LINK section
 
@@ -70,10 +70,11 @@ begin {
                 $_rules = $null;
                 $_rules = Get-InboxRule -Mailbox $mbx.PrimarySmtpAddress.ToString() -ea:SilentlyContinue |
                 Where-Object { $_.ForwardTo -or $_.ForwardAsAttachmentTo -or $_.RedirectTo }
-        
-                if ($_rules) { 
+
+                if ($_rules) {
                     foreach ($_rule in $_rules) {
                         foreach ($_fwd in $_rule.ForwardTo) {
+                            $__fwd = getFwdDetails -fwdObject $_fwd
                             [PSCustomObject]@{
                                 mbxDisplayName           = $mbx.DisplayName
                                 mbxPrimarySmtpAddress    = $mbx.PrimarySmtpAddress
@@ -81,11 +82,13 @@ begin {
                                 ruleEnabled              = $_rule.Enabled
                                 ruleDescription          = $_rule.Description
                                 ForwardOrRedirect        = 'Forward'
-                                ruleForwardToAddr        = $_fwd.Address
-                                ruleForwardToRoutingType = $_fwd.RoutingType
+                                ruleForwardToDisplayName = $__fwd.DisplayName
+                                ruleForwardToAddr        = $__fwd.Address
+                                ruleForwardToRoutingType = $__fwd.RoutingType
                             }
                         }
                         foreach ($_fwd in $_rule.ForwardAsAttachmentTo) {
+                            $__fwd = getFwdDetails -fwdObject $_fwd
                             [PSCustomObject]@{
                                 mbxDisplayName           = $mbx.DisplayName
                                 mbxPrimarySmtpAddress    = $mbx.PrimarySmtpAddress
@@ -93,11 +96,13 @@ begin {
                                 ruleEnabled              = $_rule.Enabled
                                 ruleDescription          = $_rule.Description
                                 ForwardOrRedirect        = 'ForwardAsAttachment'
-                                ruleForwardToAddr        = $_fwd.Address
-                                ruleForwardToRoutingType = $_fwd.RoutingType
+                                ruleForwardToDisplayName = $__fwd.DisplayName
+                                ruleForwardToAddr        = $__fwd.Address
+                                ruleForwardToRoutingType = $__fwd.RoutingType
                             }
                         }
                         foreach ($_rdr in $_rule.RedirectTo) {
+                            $__rdr = getFwdDetails -fwdObject $_rdr
                             [PSCustomObject]@{
                                 mbxDisplayName           = $mbx.DisplayName
                                 mbxPrimarySmtpAddress    = $mbx.PrimarySmtpAddress
@@ -105,8 +110,9 @@ begin {
                                 ruleEnabled              = $_rule.Enabled
                                 ruleDescription          = $_rule.Description
                                 ForwardOrRedirect        = 'Redirect'
-                                ruleForwardToAddr        = $_rdr.Address
-                                ruleForwardToRoutingType = $_rdr.RoutingType
+                                ruleForwardToDisplayName = $__rdr.DisplayName
+                                ruleForwardToAddr        = $__rdr.Address
+                                ruleForwardToRoutingType = $__rdr.RoutingType
                             }
                         }
                     }
@@ -115,6 +121,20 @@ begin {
         }
         catch { throw }
     }
+
+    function getFwdDetails ([object]$fwdObject) {
+        # This function massages data when we're using a standard Remote PowerShell session instead of the Exchange Management Shell.
+        if ($fwdObject.getType().Name -eq 'String') {
+            $fwdStringDetails = $fwdObject -replace '^"' -replace '\]' -split '" \[' -split ':'
+            [PSCustomObject]@{
+                DisplayName = $fwdStringDetails[0]
+                Address     = $fwdStringDetails[2]
+                RoutingType = $fwdStringDetails[1]
+            }
+        }
+        else { $fwdObject }
+    }
+
     $stopWatchPipeline.Start()
     $Script:pipelineCounter = 0
 }
@@ -134,4 +154,4 @@ process {
         try { getRules -mailbox $_ } catch { throw }
     }
 }
-end { Write-Progress @progress -Completed }  
+end { Write-Progress @progress -Completed }
