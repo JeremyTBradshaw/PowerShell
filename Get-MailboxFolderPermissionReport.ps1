@@ -110,6 +110,7 @@ process {
             }
             catch {
                 Write-Warning -Message "Failed to get permissions for FolderPath: $($folder.FolderPath)"
+                throw
             }
 
             if (($ReportMode -eq 'Summary') -or ($PSCmdlet.ParameterSetName -eq 'ExportCSVs')) {
