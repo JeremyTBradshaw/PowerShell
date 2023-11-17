@@ -1,7 +1,7 @@
 <#
     .SYNOPSIS
     Helper script to overcome the challenges with paginated results from Get-QuarantineMessage.  All parameters except
-    for -Page and -PageSize are supported.  All pages will be retuned (or EXO will barf, one or the other).
+    for -Identity, -Page, and -PageSize are supported.  All pages will be retuned (or EXO will barf, one or the other).
 
     .NOTES
     Last updated: 2023-11-17
@@ -79,7 +79,6 @@ param (
     [Parameter(ParameterSetName = 'Summary')]
     [ValidateSet('Bulk', 'HighConfPhish', 'Malware', 'Phish', 'Spam', 'SPOMalware', 'TransportRule')]
     [string]$Type
-
 )
 
 if (-not (Get-Command Get-QuarantineMessage -ErrorAction SilentlyContinue)) {
@@ -94,7 +93,7 @@ $Progress = @{
 }
 
 $gqmParams = @{
-    Page        = $PageNumber
+    Page        = 0
     PageSize    = 1000
     ErrorAction = 'Stop'
 }
