@@ -1,10 +1,10 @@
 <#
     .SYNOPSIS
-    Helper script to overcome the challenges with paginated results from Get-QuarantineMessage.  All parameters except
+    Wrapper script for Get-QuarantineMessage to overcome the challenges with paginated results.  All parameters except
     for -Identity, -Page, and -PageSize are supported.  All pages will be retuned (or EXO will barf, one or the other).
 
     .NOTES
-    Last updated: 2023-11-17
+    Last updated: 2023-11-20
     Every parameter is a direct passthrough to Get-QuarantineMessage.  See the help file for that and just know that
     pagination is taken care of for you here, so nevermind the -Page / -PageSize parameters.  The -Identity parameter
     has also been omitted since it doesn't make sense in the use case for this script.
