@@ -10,6 +10,12 @@
 
     .PARAMETER FolderScope
     Passthrough for Get-MailboxFolderStatistics' -FolderScope parameter.
+
+    .PARAMETER IncludeOldestAndNewestItems
+    Passthrough for Get-MailboxFolderStatistics' -IncludeOldestAndNewestItems parameter.
+
+    .PARAMETER IncludeSoftDeletedRecipients
+    Passthrough for Get-MailboxFolderStatistics' -IncludeSoftDeletedRecipients parameter.
 #>
 #Requires -Version 5.1
 [CmdletBinding()]
