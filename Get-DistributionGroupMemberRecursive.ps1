@@ -65,16 +65,22 @@ begin {
             if ($group.RecipientTypeDetails -ne 'DynamicDistributionGroup') {
 
                 Get-DistributionGroupMember -Identity "$($group.Guid.ToString())" -ResultSize Unlimited -ErrorAction Stop |
-                Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
+                Select-Object @{Name = 'TopParentGroup'; Expression = { $StartingGroup.PrimarySmtpAddress } },
+                @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
                 @{Name = 'Level'; Expression = { $Level } },
-                RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
+                RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid,
+                @{Name = 'TopParentGroupGuid'; Expression = { $StartingGroup.Guid } },
+                @{Name = 'ParentGroupGuid'; Expression = { $group.Guid } }
             }
             else {
                 $dynamicGroup = Get-DynamicDistributionGroup -Identity "$($group.Guid.ToString())" -ErrorAction Stop
                 Get-Recipient -RecipientPreviewFilter $dynamicGroup.RecipientFilter -OrganizationalUnit $dynamicGroup.RecipientContainer -ResultSize Unlimited |
-                Select-Object @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
+                Select-Object @{Name = 'TopParentGroup'; Expression = { $StartingGroup.PrimarySmtpAddress } },
+                @{Name = 'ParentGroup'; Expression = { $group.PrimarySmtpAddress } },
                 @{Name = 'Level'; Expression = { $Level } },
-                RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid
+                RecipientTypeDetails, PrimarySmtpAddress, DisplayName, Guid,
+                @{Name = 'TopParentGroupGuid'; Expression = { $StartingGroup.Guid } },
+                @{Name = 'ParentGroupGuid'; Expression = { $group.Guid } }
             }
         }
         catch {
