@@ -35,6 +35,10 @@ begin {
                 $Script:ht_rcptTracker[$rcptId] = $rcpt.PrimarySmtpAddress.ToString()
                 $Script:ht_rcptTracker[$rcptId]
             }
+            elseif ($rcpt.Count -gt 1) {
+                $Script:ht_rcptTracker[$rcptId] = "AMBIGUOUS_ACE('$($rcptId)'):{$($rcpt.PrimarySmtpAddress -join ', ')}"
+                $Script:ht_rcptTracker[$rcptId]
+            }
         }
     }
 
