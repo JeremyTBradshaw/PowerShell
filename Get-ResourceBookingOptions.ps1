@@ -31,14 +31,10 @@ begin {
         if ($Script:ht_rcptTracker.ContainsKey($rcptId)) { $Script:ht_rcptTracker[$rcptId] }
         else {
             $rcpt = @(Get-Recipient -Identity $rcptId -ErrorAction SilentlyContinue)
-            if ($rcpt.Count -eq 1) {
-                $Script:ht_rcptTracker[$rcptId] = $rcpt.PrimarySmtpAddress.ToString()
-                $Script:ht_rcptTracker[$rcptId]
-            }
-            elseif ($rcpt.Count -gt 1) {
-                $Script:ht_rcptTracker[$rcptId] = "AMBIGUOUS_ACE('$($rcptId)'):{$($rcpt.PrimarySmtpAddress -join ', ')}"
-                $Script:ht_rcptTracker[$rcptId]
-            }
+            if ($rcpt.Count -eq 1) { $Script:ht_rcptTracker[$rcptId] = $rcpt.PrimarySmtpAddress.ToString() }
+            elseif ($rcpt.Count -gt 1) { $Script:ht_rcptTracker[$rcptId] = "AMBIGUOUS_ACE('$($rcptId)'):{$($rcpt.PrimarySmtpAddress -join ', ')}" }
+            else { $Script:ht_rcptTracker[$rcptId] = "UNKNOWN_ACE('$($rcptId)')" }
+            $Script:ht_rcptTracker[$rcptId]
         }
     }
 
