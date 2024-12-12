@@ -22,9 +22,9 @@
 
     .Parameter UseClientIPExcludedRanges
     This bool is $true by default.  Update the section of the script:
-    
+
         if ($UseClientIPExcludedRanges -eq $true) {}
-    
+
     This allows us to filter output to only changes made from outside the
     corporate network.  The common use case of this script case is to detect
     when an account has been compromised and the attacker creates a rule to
@@ -40,7 +40,7 @@
     cmdlets (e.g. Export-Csv) will work predictably.  There could be more
     efficient ways to accomplish this, but I've settled on this one until I
     find a more favorable method.
-    
+
     Note that this dynamic list of properties challenge is also felt by Excel,
     as is noted in the following article:
     https://docs.microsoft.com/en-us/microsoft-365/compliance/export-view-audit-log-records
@@ -67,8 +67,8 @@
     .Example
     .\Search-InboxRuleChanges.ps1 -UseClientIPExcludedRanges $false -ResultSize 100 -StartDate (Get-Date).AddHours(-4)
 #>
-
 #Requires -Version 5.1
+#Requires -Modules @{ModuleName = 'ExchangeOnlineManagement'; ModuleVersion = '3.6.0'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'}
 
 [CmdletBinding()]
 param (
@@ -78,14 +78,10 @@ param (
     [bool]$UseClientIPExcludedRanges = $true
 )
 
-Write-Verbose -Message "Determining the connected Exchange environment."
-
-$ExPSSession = @()
-$ExPSSession += Get-PSSession |
-Where-Object { $_.ComputerName -eq 'outlook.office365.com' }
-
-if ($ExPSSession.Count -ne 1) {
-    Write-Warning -Message "Requires a *single* remote session to Exchange Online."
+Write-Verbose -Message "Verifying there's an active connection to EXO PowerShell."
+$exoConnectionInfo = Get-ConnectionInformation -ErrorAction Stop
+if (-not ($exoConnectionInfo | Where-Object { ($_.TokenStatus -eq 'Active') -and ($_.ConnectionUri -like '*outlook.office365.com') })) {
+    Write-Warning -Message "Please be connected to EXO via Connect-ExchangeOnline before running this script."
     break
 }
 
@@ -116,7 +112,7 @@ foreach ($sr in $SearchResults) {
     $AuditData = $sr.AuditData | ConvertFrom-Json
 
     if ($UseClientIPExcludedRanges -eq $true) {
-        
+
         if ($ClientIPExcludedIPRanges -notcontains "$($AuditData.ClientIP -replace '\[' -replace '\].*' -replace ':.*')") { $ContinueProcessing = $true }
         else { $ContinueProcessing = $false }
     }
@@ -203,7 +199,7 @@ foreach ($sr in $SearchResults) {
         }
 
         if ($ProcessedLogEntry.RuleOperation -notmatch 'RemoveMailboxRule') {
-            
+
             if ($InboxRule.Count -eq 1) {
 
                 $ProcessedLogEntry |
