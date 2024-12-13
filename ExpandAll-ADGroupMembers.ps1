@@ -39,7 +39,7 @@ begin {
                     # Add previously unseen users to the main member users collection:
                     if (-not $Script:MemberUsers[$dm.ObjectGuid.Guid]) {
 
-                        $Script:MemberUsers[$dm.ObjectGuid.Guid] = $dm
+                        $Script:MemberUsers[$dm.ObjectGuid.Guid] = $dm | Select-Object @{Name = 'Group'; Expression = { $groupDN } }, *
                     }
                 }
                 elseif ($dm.ObjectClass -eq 'group') {
@@ -51,11 +51,11 @@ begin {
                 }
             }
         }
-        catch { throw  }
+        catch { throw }
     }
 
     $Progress = @{
-        Activity = "$($PSCmdlet.MyInvocation.MyCommand.Name) - Start time: $([datetime]::Now)"
+        Activity        = "$($PSCmdlet.MyInvocation.MyCommand.Name) - Start time: $([datetime]::Now)"
         PercentComplete = -1
     }
 }
@@ -65,15 +65,15 @@ process {
     $Script:MemberGroups = @{}
     $Script:MemberUsers = @{}
 
-   try {
-       Write-Progress @Progress -Status 'Getting group members recursively...' -CurrentOperation $DistinguishedName
+    try {
+        Write-Progress @Progress -Status 'Getting group members recursively...' -CurrentOperation $DistinguishedName
 
-       getADGroupMember -groupDN $DistinguishedName
-       $Script:MemberUsers.GetEnumerator() | Select-Object -ExpandProperty Value
+        getADGroupMember -groupDN $DistinguishedName
+        $Script:MemberUsers.GetEnumerator() | Select-Object -ExpandProperty Value
     }
-   catch {
-       Write-Warning "Failed to get group members for group '$($DistinguishedName)'."
-       throw
+    catch {
+        Write-Warning "Failed to get group members for group '$($DistinguishedName)'."
+        throw
     }
 
 }
