@@ -4,7 +4,7 @@
 
     .Description
     Intended for interactive use by EXO/SCC administrators with enough access to use the following Cmdlets from the
-    ExchangeOnlineManagement PS module (a.k.a., EXO V2; https://www.powershellgallery.com/packages/exchangeonlinemanagement):
+    ExchangeOnlineManagement PS module (https://www.powershellgallery.com/packages/exchangeonlinemanagement):
 
         - Exchange Online: Get-EXOMailbox, Get-EXOMailboxStatistics
         - Security/Compliance Center: *-ComplianceSearch, *-ComplianceSearchAction
@@ -53,9 +53,7 @@
     .Link
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Export-EXOMailbox.ps1
 #>
-#Requires -PSEdition Desktop
-#Requires -Version 5.1
-#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '2.0.5' }
+#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '3.7.1' }
 [CmdletBinding(
     SupportsShouldProcess,
     ConfirmImpact = 'High'
