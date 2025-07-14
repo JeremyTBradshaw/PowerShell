@@ -53,7 +53,7 @@
     .Link
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Export-EXOMailbox.ps1
 #>
-#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '3.7.1' }
+#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '3.8.0' }
 [CmdletBinding(
     SupportsShouldProcess,
     ConfirmImpact = 'High'
@@ -61,20 +61,15 @@
 param (
     [Parameter(Mandatory)]
     [string]$AdminUPN,
-
     [Parameter(Mandatory)]
     [string]$MailboxPSmtp,
-
     [ValidateSet('Primary', 'Archive', 'Both')]
     [string]$MailboxSelection = 'Both',
-
     [switch]$InactiveMailbox,
-
     [string]$SearchNameOverride
 )
 
 if ($WhatIfPreference.IsPresent) {
-
     "Microsoft does not support -WhatIf for the Security and Compliance Center cmdlets.  " +
     "ShouldProcess support is included in this script to avoid accidentally deleting any compliance searches.  " +
     "Accordingly, -Confirm is still supported, but -WhatIf is not.  Exiting script." | Write-Warning
@@ -82,7 +77,6 @@ if ($WhatIfPreference.IsPresent) {
 }
 try {
     $progress = @{
-
         Activity        = "Export-EXOMailbox.ps1 - Start time: $([datetime]::Now)"
         PercentComplete = -1
     }
@@ -93,7 +87,7 @@ try {
 
     Write-Progress @progress -Status "Connect-ExchangeOnline"
     Disconnect-ExchangeOnline -Confirm:$false
-    Connect-ExchangeOnline -UserPrincipalName $AdminUPN -CommandName Get-Mailbox -ShowBanner:$false -ErrorAction Stop #<--: CommandName reduces time to connect, auto-includes all *-EXO*** modern Cmdlets.
+    Connect-ExchangeOnline -UserPrincipalName $AdminUPN -CommandName Get-Mailbox -ShowBanner:$false -DisableWAM -ErrorAction Stop #<--: CommandName reduces time to connect, auto-includes all *-EXO*** modern Cmdlets.
 
     Write-Progress @progress -Status 'Get-EXOMailbox'
     $MailboxLookup = @(Get-EXOMailbox $MailboxPSmtp -Properties ExchangeGuid, ArchiveGuid, isInactiveMailbox -InactiveMailboxOnly:$InactiveMailbox -ErrorAction Stop)
@@ -101,9 +95,7 @@ try {
 
         $MailboxPicker = @()
         foreach ($mbx in $MailboxLookup) {
-
             $MailboxPicker += [PSCustomObject]@{
-
                 DisplayName        = $mbx.DisplayName
                 PrimarySmtpAddress = $mbx.PrimarySmtpAddress
                 WhenCreated        = $mbx.WhenCreated
@@ -118,26 +110,22 @@ try {
     else { $MailboxLookup[0] }
 
     $ht_Mailbox = @{
-
         "$($SelectedMailbox.ExchangeGuid.ToString())" = 'Primary Mailbox'
         "$($SelectedMailbox.ArchiveGuid.ToString())"  = 'Archive Mailbox'
     }
 
     $FolderStatistics = @(
         if (@('Primary', 'Both') -contains $MailboxSelection) {
-
             Write-Progress @progress -Status 'Get-EXOMailboxFolderStatistics (primary mailbox)'
-            Get-EXOMailboxFolderStatistics $SelectedMailbox.Guid.ToString() -IncludeSoftDeletedRecipients:$InactiveMailbox -ErrorAction Stop
+            Get-EXOMailboxFolderStatistics $SelectedMailbox.ExchangeGuid.ToString() -IncludeSoftDeletedRecipients:$InactiveMailbox -ErrorAction Stop
         }
         if (@('Archive', 'Both') -contains $MailboxSelection) {
-
             if ($SelectedMailbox.ArchiveGuid.ToString() -like '000*') {
-
                 Write-Warning -Message "Mailbox $($MailboxPSmtp) is not enabled with an Archive mailbox."
             }
             else {
                 Write-Progress @progress -Status 'Get-EXOMailboxFolderStatistics (archive mailbox)'
-                Get-EXOMailboxFolderStatistics $SelectedMailbox.Guid.ToString() -IncludeSoftDeletedRecipients:$InactiveMailbox -Archive -ErrorAction Stop
+                Get-EXOMailboxFolderStatistics $SelectedMailbox.ArchiveGuid.ToString() -IncludeSoftDeletedRecipients:$InactiveMailbox -Archive -ErrorAction Stop
             }
         }
     )
@@ -145,7 +133,6 @@ try {
     $FolderPicker = @()
     $fCounter = 0
     foreach ($fStat in $FolderStatistics) {
-
         $fCounter++
         $progress['PercentComplete'] = ($fCounter / $FolderStatistics.Count) * 100
         Write-Progress @progress -Status 'Parsing/process folder statistics'
@@ -157,14 +144,12 @@ try {
         $indexIdBytes = New-Object byte[] 48
         $indexIdIdx = 0
         $folderIdBytes | Select-Object -skip 23 -First 24 | ForEach-Object {
-
             $indexIdBytes[$indexIdIdx++] = $nibbler[$_ -shr 4]
             $indexIdBytes[$indexIdIdx++] = $nibbler[$_ -band 0xF]
         }
         # Borrowed code (end)
 
         $FolderPicker += [PSCustomObject]@{
-
             Mailbox       = $ht_Mailbox["$($fStat.ContentMailboxGuid.ToString())"]
             FolderPath    = $fStat.FolderPath
             Foldersize    = $fStat.FolderSize
@@ -174,14 +159,13 @@ try {
     }
 
     $progress['PercentComplete'] = -1
-
     Write-Progress @progress -Status 'Waiting for folder selections'
     $SelectedFolders = @($FolderPicker | Out-GridView -OutputMode Multiple -Title 'Select folders to include in the export:')
     if ($SelectedFolders.Count -lt 1) {
-
         Write-Warning -Message 'No folders were selected.  Exiting script prematurely.'
         break
     }
+
     ###########---------------------------------#
     #endregion# Find mailbox and select folders #
     ###########---------------------------------#
@@ -198,15 +182,13 @@ try {
     function connectIPPSSession {
         try {
             Disconnect-ExchangeOnline -Confirm:$false
-            Connect-IPPSSession -UserPrincipalName $AdminUPN -CommandName *-ComplianceSearch, *-ComplianceSearchAction -ErrorAction Stop -WarningAction SilentlyContinue
+            Connect-IPPSSession -UserPrincipalName $AdminUPN -DisableWAM -CommandName *-ComplianceSearch, *-ComplianceSearchAction -ErrorAction Stop -WarningAction SilentlyContinue
         }
         catch {
             # Connect-IPPSSession fails often, and often it is for no good reason...
             if ($Script:connectIPPRetries -lt $Script:connectIPPMaxRetries) {
-
                 "Failed on Connect-IPPSSession.  Will retry maximum $($Script:connectIPPMaxRetries) times, pausing 10 seconds between attempts." |
                 Write-Warning
-
                 $Script:connectIPPRetries++
                 Start-Sleep -Seconds 10
                 connectIPPSSession
@@ -223,7 +205,6 @@ try {
 
     Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($SearchName)')"
     $ComplianceSearchParams = @{
-
         Name                                  = $SearchName
         ContentMatchQuery                     = "$($SelectedFolders.FolderQuery -join ' OR ')"
         ExchangeLocation                      = "$(switch ($InactiveMailbox) {$true {'.'}})$($MailboxPSmtp)"
@@ -232,7 +213,6 @@ try {
     # In case we're re-trying the script (i.e., starting over from scratch), we'll first try to delete the Compliance Search (if it already exists):
     $ComplianceSearch = Get-ComplianceSearch $SearchName -ErrorAction SilentlyContinue
     if ($ComplianceSearch) {
-
         if ($PSCmdlet.ShouldProcess(
                 "Existing/conflicting compliance search found: $($SearchName) ($($ComplianceSearch.Identity))",
                 'Delete'
@@ -247,7 +227,7 @@ try {
             break
         }
     }
-    $ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop
+    $ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop -Confirm:$false
 
     Write-Progress @progress -Status "Start-ComplianceSearch (-Name '$($SearchName)')"
     Start-ComplianceSearch $SearchName -ErrorAction Stop
@@ -261,7 +241,7 @@ try {
     if ($ComplianceSearch.Items -gt 0) {
 
         Write-Progress @progress -Status 'New-ComplianceSearchAction (-Preview)'
-        $ComplianceSearchPreview = New-ComplianceSearchAction -SearchName $SearchName -Preview -ErrorAction Stop
+        $ComplianceSearchPreview = New-ComplianceSearchAction -SearchName $SearchName -Preview -ErrorAction Stop -Confirm:$false
         do {
             Write-Progress @progress -Status "Waiting for preview of compliance search results (search name: '$($SearchName)')"
             Start-Sleep -Seconds 5
