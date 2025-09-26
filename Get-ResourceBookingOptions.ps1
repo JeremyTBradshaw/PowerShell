@@ -71,7 +71,7 @@ process {
             Name       = 'RequestOutOfPolicy'
             Expression = { ($_.RequestOutOfPolicy | ForEach-Object { getRecipient -rcptId $_ }) -join ', ' }
         },
-        AddAdditionalResponse, AdditionalResponse,
+        AddAdditionalResponse, AdditionalResponse, EnableResponseDetails,
         EnforceSchedulingHorizon, ScheduleOnlyDuringWorkHours, BookingWindowInDays, MaximumDurationInMinutes, MinimumDurationInMinutes,
         AllowRecurringMeetings, AllowConflicts, ConflictPercentageAllowed, MaximumConflictInstances
     }

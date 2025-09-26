@@ -62,6 +62,8 @@ foreach ($f in $importedCSV) {
             AccessRights = $f.AccessRights
             ErrorAction  = 'Stop'
         }
+        if ($f.AccessRights -like '*,*') { $commandParams['AccessRights'] = $f.AccessRights -replace '\s' -split ',' }
+
         # Attempt by FolderPath 1st (to avoid case-insensitivity matching issues that can be encountered with FolderId).
         [void](Add-MailboxFolderPermission "$($f.MailboxIdentity):$($f.FolderPath -replace '\/', '\')" @commandParams)
         Write-Host -ForegroundColor Green "Success (Add by Path): User:$($f.User) | AccessRights:$($f.AccessRights) | Folder:$($f.FolderPath)"
