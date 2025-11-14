@@ -53,7 +53,7 @@
     .Link
     https://github.com/JeremyTBradshaw/PowerShell/blob/main/Export-EXOMailbox.ps1
 #>
-#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '3.8.0' }
+#Requires -Modules @{ ModuleName = 'ExchangeOnlineManagement'; Guid = 'B5ECED50-AFA4-455B-847A-D8FB64140A22'; ModuleVersion = '3.9.0' }
 [CmdletBinding(
     SupportsShouldProcess,
     ConfirmImpact = 'High'
@@ -179,10 +179,19 @@ try {
     Write-Progress @progress -Status 'Connect-IPPSSession'
     $Script:connectIPPMaxRetries = 2
     $Script:connectIPPRetries = 0
-    function connectIPPSSession {
+    function connectIPPSSession ([switch]$EnableSearchOnlySession) {
         try {
+            $connectIPPSSessionParams = @{
+                UserPrincipalName = $AdminUPN
+                DisableWAM        = $true
+                ShowBanner        = $false
+                CommandName       = @('Get-ComplianceSearch', 'New-ComplianceSearch', 'Remove-ComplianceSearch', 'Start-ComplianceSearch', 'Get-ComplianceSearchAction', 'New-ComplianceSearchAction')
+                ErrorAction       = 'Stop'
+                WarningAction     = 'SilentlyContinue'
+            }
+            if ($EnableSearchOnlySession) { $connectIPPSSessionParams['EnableSearchOnlySession'] = $true }
             Disconnect-ExchangeOnline -Confirm:$false
-            Connect-IPPSSession -UserPrincipalName $AdminUPN -DisableWAM -CommandName *-ComplianceSearch, *-ComplianceSearchAction -ErrorAction Stop -WarningAction SilentlyContinue
+            Connect-IPPSSession @connectIPPSSessionParams
         }
         catch {
             # Connect-IPPSSession fails often, and often it is for no good reason...
@@ -198,71 +207,72 @@ try {
     }
     connectIPPSSession
 
-    $SearchName = if ($PSBoundParameters.ContainsKey('SearchNameOverride')) { $SearchNameOverride } else {
-
+    $Script:SearchName = if ($PSBoundParameters.ContainsKey('SearchNameOverride')) { $SearchNameOverride } else {
         "Export-EXOMailbox.ps1_$($MailboxPSmtp)_$($MailboxSelection -replace 'Both','Primary+Archive')$(if ($InactiveMailbox) { '_InactiveMBX' })"
     }
 
-    Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($SearchName)')"
+    Write-Progress @progress -Status "New-ComplianceSearch (-Name '$($Script:SearchName)')"
     $ComplianceSearchParams = @{
-        Name                                  = $SearchName
+        Name                                  = $Script:SearchName
         ContentMatchQuery                     = "$($SelectedFolders.FolderQuery -join ' OR ')"
         ExchangeLocation                      = "$(switch ($InactiveMailbox) {$true {'.'}})$($MailboxPSmtp)"
         AllowNotFoundExchangeLocationsEnabled = $InactiveMailbox
     }
-    # In case we're re-trying the script (i.e., starting over from scratch), we'll first try to delete the Compliance Search (if it already exists):
-    $ComplianceSearch = Get-ComplianceSearch $SearchName -ErrorAction SilentlyContinue
-    if ($ComplianceSearch) {
-        if ($PSCmdlet.ShouldProcess(
-                "Existing/conflicting compliance search found: $($SearchName) ($($ComplianceSearch.Identity))",
-                'Delete'
-            )
-        ) {
-            Write-Progress @progress -Status "Removing pre-existing compliance search '$($SearchName)' before creating a new one by the same name.  Then sleeping 30 seconds before proceeding."
-            Remove-ComplianceSearch $SearchName -Confirm:$false -ErrorAction SilentlyContinue
-            Start-Sleep -Seconds 30
+    # In case we're re-trying the script (i.e., starting over from scratch), we'll need to ensure a unique search name.
+    # (as of November 2025, recreating a search by the same name in PowerShell results in the new search being invisible/unmanagement in the Purview Compliance Center website):
+    $Script:ComplianceSearch = Get-ComplianceSearch $Script:SearchName -ErrorAction SilentlyContinue
+    if ($Script:ComplianceSearch) {
+        if ($PSCmdlet.ShouldProcess("Message", 'Press Y or Enter to provide a new search name or N to cancel and delete the conflicting search manually before re-running this script.', "'$($Script:SearchName)' already exists")) {
+            $Script:SearchName = $null; $Script:SearchName = Read-Host -Prompt "Enter new and unique name for the search" -ErrorAction Stop
         }
         else {
-            Write-Warning -Message "Ending script prematurely due to existing compliance search found with conflicting name '$($SearchName)'."
+            Write-Warning -Message "Ending script prematurely due to existing compliance search found with conflicting name '$($Script:SearchName)'."
             break
         }
     }
-    $ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop -Confirm:$false
-
-    Write-Progress @progress -Status "Start-ComplianceSearch (-Name '$($SearchName)')"
-    Start-ComplianceSearch $SearchName -ErrorAction Stop
-    do {
-        Write-Progress @progress -Status "Waiting for compliance search to complete (search name: '$($SearchName)')"
-        Start-Sleep -Seconds 5
-        $ComplianceSearch = Get-ComplianceSearch $SearchName -ErrorAction Stop
+    if ($null -ne $Script:SearchName) {
+        $Script:ComplianceSearchParams['Name'] = $Script:SearchName
+        $Script:ComplianceSearch = New-ComplianceSearch @ComplianceSearchParams -ErrorAction Stop -Confirm:$false
     }
-    while ($ComplianceSearch.Status -ne 'Completed')
+    else { break }
 
-    if ($ComplianceSearch.Items -gt 0) {
+    # Starting with ExchangeOnlineManagement v3.0.9, we need to connect with the -EnableSearchOnlySession before we can start searches or perform search actions:
+    Disconnect-ExchangeOnline -Confirm:$false; connectIPPSSession -EnableSearchOnlySession
+
+    Write-Progress @progress -Status "Start-ComplianceSearch (-Name '$($Script:SearchName)')"
+    Start-ComplianceSearch $Script:SearchName -ErrorAction Stop
+    do {
+        Write-Progress @progress -Status "Waiting for compliance search to complete (search name: '$($Script:SearchName)')"
+        Start-Sleep -Seconds 5
+        $Script:ComplianceSearch = Get-ComplianceSearch $Script:SearchName -ErrorAction Stop
+    }
+    while ($Script:ComplianceSearch.Status -ne 'Completed')
+
+    if ($Script:ComplianceSearch.Items -gt 0) {
 
         Write-Progress @progress -Status 'New-ComplianceSearchAction (-Preview)'
-        $ComplianceSearchPreview = New-ComplianceSearchAction -SearchName $SearchName -Preview -ErrorAction Stop -Confirm:$false
+        $ComplianceSearchPreview = New-ComplianceSearchAction -SearchName $Script:SearchName -Preview -ErrorAction Stop -Confirm:$false
         do {
-            Write-Progress @progress -Status "Waiting for preview of compliance search results (search name: '$($SearchName)')"
+            Write-Progress @progress -Status "Waiting for preview of compliance search results (search name: '$($Script:SearchName)')"
             Start-Sleep -Seconds 5
-            $ComplianceSearchPreview = Get-ComplianceSearchAction "$($SearchName)_Preview" -ErrorAction Stop
+            $ComplianceSearchPreview = Get-ComplianceSearchAction "$($Script:SearchName)_Preview" -ErrorAction Stop
         }
         while ($ComplianceSearchPreview.Status -ne 'Completed')
 
         Write-Progress @progress -Status 'Get-ComplianceSearch, parsing/processing search results'
-        $ComplianceSearch = Get-ComplianceSearch $SearchName -ErrorAction Stop
+        $Script:ComplianceSearch = Get-ComplianceSearch $Script:SearchName -ErrorAction Stop
         [PSCustomObject]@{
-            SearchName     = $ComplianceSearch.Name
-            Status         = $ComplianceSearch.Status
-            SuccessResults = $ComplianceSearch.SuccessResults
-            Items          = $ComplianceSearch.Items
-            SizeMB         = [math]::Round($ComplianceSearch.Size / 1MB, 2)
-            SizeGB         = [math]::Round($ComplianceSearch.Size / 1GB, 2)
+            SearchName     = $Script:ComplianceSearch.Name
+            Status         = $Script:ComplianceSearch.Status
+            SuccessResults = $Script:ComplianceSearch.SuccessResults
+            Items          = $Script:ComplianceSearch.Items
+            SizeMB         = [math]::Round($Script:ComplianceSearch.Size / 1MB, 2)
+            SizeGB         = [math]::Round($Script:ComplianceSearch.Size / 1GB, 2)
             ExportPSTUrl   = 'https://compliance.microsoft.com/contentsearchv2?viewid=search'
         }
     }
     else {
-        Write-Warning -Message "The compliance search ('$($SearchName)') didn't return any results."
+        Write-Warning -Message "The compliance search ('$($Script:SearchName)') didn't return any results."
     }
     ###########----------------------------------#
     #endregion# Create and run compliance search #
