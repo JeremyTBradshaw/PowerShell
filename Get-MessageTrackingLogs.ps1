@@ -75,6 +75,7 @@ try {
         $gmtlParams['Server'] = $srv.Name
         $SearchResults += Get-MessageTrackingLog @gmtlParams
     }
+    $SearchResults | Sort-Object Timestamp
 }
 catch { throw }
 
