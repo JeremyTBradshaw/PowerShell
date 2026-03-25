@@ -83,7 +83,6 @@ begin {
 
         Write-Progress @progress -PercentComplete 80
         foreach ($role in $Roles) {
-
             $newMgmtRoleAssignmentParams = @{
                 Name                = "RBAC-for-Apps $($commonDisplayName) - $($Script:ht_Roles[$role])"
                 Role                = $role
@@ -95,7 +94,7 @@ begin {
             Write-Progress @progress -PercentComplete 100
         }
 
-        "RBAC-for-Apps configuration is ready to go.  Add mailboxes to the group " +
+        'RBAC-for-Apps configuration is ready to go.  Add mailboxes to the group ' +
         """RBAC-for-Apps Management Scope - $($commonDisplayName)"" for them to be accessible to the ""$($AADSPNDisplayName)"" app." |
         Write-Host -ForegroundColor Green
     }

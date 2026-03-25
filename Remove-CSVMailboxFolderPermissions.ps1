@@ -61,7 +61,7 @@ if ($PSCmdlet.ShouldProcess("all folders in the CSV", "remove permission(s)")) {
         }
         catch {
             Write-Host -ForegroundColor Red "Failure (Remove by Path): User:$($f.User) | Folder:$($f.FolderPath)`nError: $($_.Exception.Message)"
-            if ($_.Exception.Message -like '*There is no existing permission entry found for user*') { continue }
+            # if ($_.Exception.Message -like '*There is no existing permission entry found for user*') { continue }
             if ($_.Exception.Message -like '*matches multiple entries.') { Write-Host -ForegroundColor Red "Ending script prematurely."; break }
             try {
                 # If FolderPath fails (likely due to special characters in a folder name), attempt by FolderId.
@@ -70,7 +70,7 @@ if ($PSCmdlet.ShouldProcess("all folders in the CSV", "remove permission(s)")) {
             }
             catch {
                 Write-Host -ForegroundColor Red "Failure (Remove by FolderId): User:$($f.User) | Folder:$($f.FolderPath)`nError: $($_.Exception.Message)"
-                if ($_.Exception.Message -like '*There is no existing permission entry found for user*') { continue }
+                # if ($_.Exception.Message -like '*There is no existing permission entry found for user*') { continue }
                 if ($_.Exception.Message -like '*matches multiple entries.') { Write-Host -ForegroundColor Red "Ending script prematurely."; break }
                 try {
                     # If still uncessful, it might be an ex-user / stale ACE, try with -Force, trying 1st by FolderPath:
