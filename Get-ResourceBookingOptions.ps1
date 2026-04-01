@@ -60,13 +60,13 @@ process {
             Identity                    = $Identity[0]
             AutomateProcessing          = $_calProc.AutomateProcessing
             ForwardRequestsToDelegates  = $_calProc.ForwardRequestsToDelegates
-            ResourceDelegates           = if ($_calProc.ResourceDelegates) { ($_calProc.ResourceDelegates | ForEach-Object { getRecipient -rcptId $_ }) -join ', ' } else { $null }
+            ResourceDelegates           = if ($_calProc.ResourceDelegates) { ($_calProc.ResourceDelegates | ForEach-Object { getRecipient -rcptId $_ } | Sort-Object) -join ', ' } else { $null }
             AllBookInPolicy             = $_calProc.AllBookInPolicy
             AllRequestInPolicy          = $_calProc.AllRequestInPolicy
             AllRequestOutOfPolicy       = $_calProc.AllRequestOutOfPolicy
-            BookInPolicy                = if ($_calProc.BookInPolicy) { ($_calProc.BookInPolicy | ForEach-Object { getRecipient -rcptId $_ }) -join ', ' } else { $null }
-            RequestInPolicy             = if ($_calProc.RequestInPolicy) { ($_calProc.RequestInPolicy | ForEach-Object { getRecipient -rcptId $_ }) -join ', ' } else { $null }
-            RequestOutOfPolicy          = if ($_calProc.RequestOutOfPolicy) { ($_calProc.RequestOutOfPolicy | ForEach-Object { getRecipient -rcptId $_ }) -join ', ' } else { $null }
+            BookInPolicy                = if ($_calProc.BookInPolicy) { ($_calProc.BookInPolicy | ForEach-Object { getRecipient -rcptId $_ } | Sort-Object) -join ', ' } else { $null }
+            RequestInPolicy             = if ($_calProc.RequestInPolicy) { ($_calProc.RequestInPolicy | ForEach-Object { getRecipient -rcptId $_ } | Sort-Object) -join ', ' } else { $null }
+            RequestOutOfPolicy          = if ($_calProc.RequestOutOfPolicy) { ($_calProc.RequestOutOfPolicy | ForEach-Object { getRecipient -rcptId $_ } | Sort-Object) -join ', ' } else { $null }
             AddAdditionalResponse       = $_calProc.AddAdditionalResponse
             AdditionalResponse          = $_calProc.AdditionalResponse
             EnableResponseDetails       = $_calProc.EnableResponseDetails
