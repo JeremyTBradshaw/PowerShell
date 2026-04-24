@@ -47,6 +47,8 @@
     mailboxes found) and for the folder selections, Out-Gridview is used to allow for easy GUI interaction.
 
     .Notes
+    **Update**: Deprecated 2026-04-22, replaced by Get-KeyQLForContentSearchByMailboxFolderId.ps1
+    
     This script was initially created via Save-As from a Microsoft-created script (Export-Folder.ps1). Most of the code
     has been replaced, and a tiny bit remains.  Credits are included where due.
 
