@@ -38,6 +38,7 @@
 
 .NOTES
     - v1.0.0 (2026-09-10): Initial version, tested and working on 100s of 1000s of audit log rows.
+    - v1.0.1 (2026-09-18): Updated CSV import logic to support different columns depending where UAL CSV was exported from (PowerShell vs Purview website).
 
 .OUTPUTS
     CSV file named <OutputCSVFileNamePrefix>_ExchangeItem-Operations.csv, which by default is placed into $HOME\Downloads.
@@ -49,11 +50,13 @@ param (
     [System.IO.FileInfo]$RawUnifiedAuditLogCSVFile,
 
     [string]$OutputCSVFileNamePrefix = '5551212',
-    [ValidateScript({
+    [ValidateScript(
+        {
             if (Test-Path $_ -PathType Container -ErrorAction SilentlyContinue) { $true } else {
                 throw "Folder '$($_)' could not be found."
             }
-        })]
+        }
+    )]
     [System.IO.FileInfo]$OutputFolder = "$HOME\Downloads\"
 )
 
@@ -77,10 +80,7 @@ function Get-AttachmentsCount {
         $Attachments
     )
 
-    if ([string]::IsNullOrWhiteSpace([string]$Attachments)) {
-        return $null
-    }
-
+    if ([string]::IsNullOrWhiteSpace([string]$Attachments)) { return $null }
     @([string]$Attachments -split '; ').Count
 }
 
@@ -167,20 +167,49 @@ function Get-ItemEntries {
 }
 
 # Import and validate the raw UAL CSV file:
-try { $inputUAL = Import-Csv $RawUnifiedAuditLogCSVFile -ErrorAction Stop }
+try { $inputUAL = @(Import-Csv $RawUnifiedAuditLogCSVFile -ErrorAction Stop) }
 catch { throw "Unable to import '$($RawUnifiedAuditLogCSVFile)': $($_.Exception.Message)" }
-$inputUALProperties = $inputUAL | Get-Member -MemberType Properties | Select-Object -ExpandProperty Name
-foreach ($requiredProperty in @('AuditData', 'AuditSearchRequestMetadata', 'CreationDate', 'Operations', 'RecordType', 'ResultCount', 'ResultIndex', 'UserIds')) {
-    if ($inputUALProperties -notcontains $requiredProperty) {
-        throw "CSV file is missing one or more required properties ($($requiredProperties -join ', '))."
+
+if ($inputUAL.Count -eq 0) { throw "The CSV file is empty." }
+
+$columnAliases = @{
+    Identity     = @('Id', 'Identity', 'RecordId')
+    CreationDate = @('CreationDate')
+    RecordType   = @('RecordType')
+    Operations   = @('Operation', 'Operations')
+    UserIds      = @('UserId', 'UserIds')
+    AuditData    = @('AuditData')
+}
+
+$inputUALProperties = @($inputUAL[0].PSObject.Properties.Name)
+$resolvedColumns = @{}
+$missingColumns = @()
+
+foreach ($requiredColumn in $columnAliases.Keys) {
+    $matchingColumns = @($inputUALProperties | Where-Object { $_ -in $columnAliases[$requiredColumn] })
+
+    if ($matchingColumns.Count -eq 0) { $missingColumns += $requiredColumn }
+    else { $resolvedColumns[$requiredColumn] = $matchingColumns[0] }
+}
+
+if ($missingColumns.Count -gt 0) {
+    throw "CSV file is missing required columns: $($missingColumns -join ', '). Found columns: $($inputUALProperties -join ', ')"
+}
+
+$inputUAL = foreach ($row in $inputUAL) {
+    [pscustomobject]@{
+        Identity     = $row.($resolvedColumns['Identity'])
+        AuditData    = $row.($resolvedColumns['AuditData'])
+        CreationDate = $row.($resolvedColumns['CreationDate'])
+        Operations   = $row.($resolvedColumns['Operations'])
+        RecordType   = $row.($resolvedColumns['RecordType'])
+        UserIds      = $row.($resolvedColumns['UserIds'])
     }
 }
 
 # Expand AuditData:
 $records = foreach ($row in $inputUAL) {
-    try {
-        $record = ConvertFrom-Json -InputObject $row.AuditData -Depth 20 -ErrorAction Stop
-    }
+    try { $record = ConvertFrom-Json -InputObject $row.AuditData -Depth 20 -ErrorAction Stop }
     catch {
         Write-Warning "Skipping row with Id '$($row.Id)' because the AuditData column failed to parse with ConvertFrom-Json: $($_.Exception.Message)"
         continue
